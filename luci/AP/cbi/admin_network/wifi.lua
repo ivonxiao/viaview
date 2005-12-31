@@ -170,8 +170,15 @@ if has_sta then
 else
 	ch = s:option(Value, "channel", translate("Channel"))
 	ch:value("auto", translate("auto"))
+	b5gBand=false
+	if(iw and iw.freqlist and iw.freqlist[1].mhz>5000)then
+		b5gBand=true
+	end
 	for _, f in ipairs(iw and iw.freqlist or { }) do
 		if not f.restricted then
+			if(b5gBand == false and f.mhz>5000)then
+				break
+			end
 			ch:value(f.channel, "%i (%.3f GHz)" %{ f.channel, f.mhz / 1000 })
 		end
 	end
@@ -197,6 +204,9 @@ if hwtype == "mac80211" then
 	--mode = s:taboption("advanced", ListValue, "hwmode", translate("Mode"))
 	mode = s:option(ListValue, "hwmode", translate("HW Mode"))
 	mode:value("", translate("auto"))
+	if(b5gBand == false)then
+		hw_modes.a =false
+	end
 	if hw_modes.b then mode:value("11b", "802.11b") end
 	if hw_modes.g then mode:value("11g", "802.11g") end
 	if hw_modes.a then mode:value("11a", "802.11a") end

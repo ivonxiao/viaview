@@ -40,6 +40,9 @@ You may obtain a copy of the License at
 
 			local hw = dev.iwinfo.hardware_name
 			if hw then
+				if(#bands>2)then
+					bands=string.sub(bands,2)
+				end
 				return "%s 802.11%s" %{ hw, bands }
 			end
 		end
