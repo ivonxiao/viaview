@@ -1,0 +1,24 @@
+<%#
+LuCI - Lua Configuration Interface
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+$Id$
+
+-%>
+
+<%+header%>
+<h2><a id="content" name="content"><%:System%></a></h2>
+
+<h3><%:Reset to defaults%></h3>
+	<form method="post" action="<%=REQUEST_URI%>" enctype="multipart/form-data">	
+	<p><%:Reset all configuration to default.%></p>			
+	<% if reset_avail then %>
+			<input onclick="return confirm('<%:Really reset all changes?%>')"  type="submit" name="reset" style="background:transparent;border:none;text-decoration:underline;color:blue;padding:0;margin:0;" value="<%:Perform reset%>" />
+	<% end %>
+	</form>
+<%+footer%>

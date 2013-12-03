@@ -1,0 +1,45 @@
+<%#
+LuCI - Lua Configuration Interface
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+$Id$
+
+-%>
+
+<%+header%>
+
+<h2><a id="content" name="content"><%:System%></a></h2>
+
+<h3><%:Upgrade Firmware%></h3>
+		<% if upgrade_avail then %>
+			<form method="post" action="<%=REQUEST_URI%>" enctype="multipart/form-data">	
+			<p><%:Upload image to replace the running firmware. Check "Keep settings" to retain the current configuration .%></p>			
+				<div>
+					<div>
+						<label class="cbi-value-title" for="keep"><%:Keep settings%>:</label>
+						<div class="cbi-value-field">
+							<input type="checkbox" name="keep" id="keep" checked="checked" />
+						</div>
+					</div>
+					<div class="cbi-value-last<% if image_invalid then %> cbi-value-error<% end %>">
+						<label class="cbi-value-title" for="image"><%:Image%>:</label>
+						<div>
+							<input type="file" name="image" id="image" />
+							<input type="submit" class="cbi-button cbi-input-apply" value="<%:Upgrade%>" />
+						</div>
+					</div>
+				</div>
+				<% if image_invalid then %>
+					<div class="cbi-section-error"><%:The uploaded image file does not contain a supported format. %></div>
+				<% end %>
+			</form>
+		<% else %>
+			<div class="cbi-section-descr"><%:Sorry, there is no sysupgrade support present, a new firmware image must be flashed manually. %></div>
+		<% end %>
+
+<%+footer%>

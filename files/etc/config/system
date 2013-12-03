@@ -1,0 +1,6 @@
+config system
+	option hostname	VN5901
+	option timezone	UTC
+
+config timeserver ntp
+	option enable_server 0

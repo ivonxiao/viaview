@@ -1,0 +1,421 @@
+<%+header%>
+<%-
+json= require "luci.json"
+sys=require "luci.sys"
+dhcpinfo={}
+function ReadDhcpConfig()
+	local start_pos
+	local end_pos,key,idType
+	local optionClass,leaseEntry
+	local idx,idx1
+	local class_cnt,lease_cnt
+	fd=io.open('/etc/dhcpd.conf','r')
+	if(fd ==nil) then
+		return
+	end
+	for c in fd:lines(1) do		
+		start_pos=string.find(c,'netmask ')
+		if(start_pos) then
+			end_pos=string.find(c,' {',start_pos+#('netmask '))
+			if(end_pos) then 
+				mask=string.sub(c,start_pos+#('netmask '),end_pos-1)
+				leaseEntry={}
+				--table.insert(leaseList,leaseEntry)
+				leaseEntry.mask=mask
+			end	
+		end	
+		
+		start_pos=string.find(c,'range ')
+		if(start_pos) then
+			end_pos=string.find(c,' ',start_pos+#('range '))
+			if(end_pos) then 
+				start=string.sub(c,start_pos+#('range '),end_pos-1)
+				--print(start)
+				leaseEntry.start=start
+			end	
+			start_pos=string.find(c,';',end_pos+#(' '))
+			if(end_pos) then 
+				end_ip=string.sub(c,end_pos+#(' '),start_pos-1)
+				--print(end_ip)
+				leaseEntry.end_ip=end_ip
+			end	
+		end	
+		start_pos=string.find(c,'option domain-name-servers ',1,true)
+		if(start_pos) then
+			end_pos=string.find(c,',',start_pos+#('option domain-name-servers '))
+			if(end_pos) then 
+				primaryDNS=string.sub(c,start_pos+#('option domain-name-servers '),end_pos-1)
+				if(leaseEntry) then
+					leaseEntry.primaryDNS=primaryDNS
+				end	
+				start_pos=string.find(c,';',end_pos+#(','))
+				if(start_pos) then 
+					secondaryDNS=string.sub(c,end_pos+#(','),start_pos-1)
+					if(leaseEntry) then
+						leaseEntry.secondDNS=secondaryDNS
+					end	
+				end	
+			else
+				end_pos=string.find(c,';',start_pos+#('option domain-name-servers '))
+				if(end_pos) then
+					primaryDNS=string.sub(c,start_pos+#('option domain-name-servers '),end_pos-1)
+					if(leaseEntry) then
+						leaseEntry.primaryDNS=primaryDNS
+					end	
+				end	
+			end	
+		end	
+		start_pos=string.find(c,'option domain-name "',1,true)
+		if(start_pos) then
+			end_pos=string.find(c,'";',start_pos+#('option domain-name "'))
+			domain=string.sub(c,start_pos+#('option domain-name "'),end_pos-1)
+			if(leaseEntry) then
+				leaseEntry.domain=domain
+			end	
+		end	
+		start_pos=string.find(c,'option routers ')
+		if(start_pos) then
+			end_pos=string.find(c,';',start_pos+#('option routers '))
+			gateway=string.sub(c,start_pos+#('option routers '),end_pos-1)
+			if(leaseEntry) then
+				leaseEntry.gateway=gateway
+			end	
+		end	
+		start_pos=string.find(c,'default-lease-time ',1,true)
+		if(start_pos) then
+			end_pos=string.find(c,';',start_pos+#('default-lease-time '))
+			lease=string.sub(c,start_pos+#('default-lease-time '),end_pos-1)
+			if(leaseEntry) then
+				leaseEntry.lease=tonumber(lease)
+			end	
+		end	
+		start_pos=string.find(c,'INTERFACE wlan0')
+		if(start_pos) then			
+			if(dhcpinfo.wlan2 == nil) then
+				dhcpinfo.wlan2=leaseEntry
+			end	
+		end	
+		start_pos=string.find(c,'INTERFACE wlan1')
+		if(start_pos) then			
+			if(dhcpinfo.wlan5 == nil) then
+				dhcpinfo.wlan5=leaseEntry
+			end				
+		end	
+	end	
+	io.close(fd)
+	dhcpinfo.dhcp=0	
+	if((require "luci.fs").isfile('/var/run/dhcpd.pid')) then
+		dhcpinfo.dhcp=1
+	end   
+end
+ReadDhcpConfig()
+-%>
+<style>
+	 #maincontent ul {margin:0;list-style:none}
+	 #error_span{margin-left:5em;padding:10px;color:#f00;font-size:1.2em;background:#cc0;border-radius:15px 15px;display:none}
+	 table{border-spacing:0;border-collapse:collapse;max-height:10em;overflow:auto;display:block}
+	th,td{width:160px;border:1px solid #ccc;text-align:left;height:20px}
+	fieldset ul ul{border:1px solid #ccc none}
+	fieldset li{clear:left;padding:0.25em 0;border-bottom:1px dotted #bbb}
+	li.last-item{border:none}
+	select{width:155px}
+	input:disabled,select:disabled{background:#ccc}
+</style>
+	<h2><a id="content" name="content"><%:DHCP IPv4 Setting%></a></h2>
+	<div class="cbi-map-descr">User can set IPv4 <abbr title="Dynamic Host Configuration Protocol">DHCP</abbr> server.
+	<span id="error_span"></span>
+	</div>
+	<form method="post" name="fDHCP" action="<%=controller%>/admin/network/DHCPConfigSave">
+	<fieldset class="cbi-section">
+		<legend>DHCP Configuration</legend>
+		<ul>
+			<li class="last-item">
+				<input type="checkbox" name="dhcp_switch" id="dhcp_switch"  />
+				<label for="dhcp_switch" class="cbi-value-title">Enable DHCP Server</label>
+			</li>			
+		</ul>		
+		<div id="dhcp_wrapper">			
+			<fieldset class="cbi-section">
+				<legend>Wireless 2.4G</legend>
+				<ul>
+			<li>
+				<label for="startIP" class="cbi-value-title">Start IP Address :</label>						
+				<input type="input" name="startIP" id="startIP" />
+			</li>
+			<li>
+				<label for="endIP" class="cbi-value-title">End IP Address :</label>						
+				<input type="input" name="endIP" id="endIP" />
+			</li>
+			<li>
+				<label for="mask" class="cbi-value-title">Netmask :</label>						
+				<input type="input" name="mask" id="mask" />
+			</li>
+			<li>
+				<label for="leaseTime" class="cbi-value-title">Lease Time :</label>						
+				<input type="input" name="leaseTime" id="leaseTime" />
+			</li>
+			<li class="last-item">
+				<label for="gateway" class="cbi-value-title">Gateway :</label>						
+				<input type="input" name="gateway" id="gateway" readonly="readonly" />
+			</li>
+			</ul>
+			</fieldset>		
+			<fieldset class="cbi-section">
+			<legend>Wireless 5G</legend>
+			<ul>
+			<li>
+				<label for="g5startIP" class="cbi-value-title">Start IP Address :</label>						
+				<input type="input" name="g5startIP" id="g5startIP" />
+			</li>
+			<li>
+				<label for="g5endIP" class="cbi-value-title">End IP Address :</label>						
+				<input type="input" name="g5endIP" id="g5endIP" />
+			</li>
+			<li>
+				<label for="g5mask" class="cbi-value-title">Netmask :</label>						
+				<input type="input" name="g5mask" id="g5mask" />
+			</li>
+			<li>
+				<label for="g5leaseTime" class="cbi-value-title">Lease Time :</label>						
+				<input type="input" name="g5leaseTime" id="g5leaseTime" />
+			</li>
+			<li class="last-item">
+				<label for="g5gateway" class="cbi-value-title">Gateway :</label>						
+				<input type="input" name="g5gateway" id="g5gateway" readonly="readonly" />
+			</li>	
+			</ul>		
+			</fieldset>		
+			<ul style="padding:0 1em">
+			<li>
+			<label for="domain" class="cbi-value-title">Domain :</label>						
+			<input type="input" name="domain" id="domain" />
+			</li>
+			<li>	
+				<label for="primaryDNS" class="cbi-value-title">Primary DNS :</label>						
+				<input type="input" name="primaryDNS" id="primaryDNS" />	
+			</li>	
+			<li>
+				<label for="backupDNS" class="cbi-value-title">Secondary DNS :</label>						
+				<input type="input" name="backupDNS" id="backupDNS" />
+			</li>			
+			</ul>
+		</div>	
+	</fieldset>	
+	<input type="submit" value="Apply" class="cbi-button cbi-button-apply" />	
+	</form>			
+<script type="text/javascript" src="<%=resource%>/util.js"></script>
+<script>
+//<![CDATA[
+var info={};
+info.wlan2={gateway:'192.168.2.1'},info.wlan5={gateway:'192.168.3.1'};
+function makeJsonInfo() {
+	info.dhcp=(document.getElementById('dhcp_switch').checked)?1:0;  //dhcp
+	if(info.dhcp===0)return;
+	var error=document.getElementById('error_span');
+	var start =document.getElementById("startIP"),
+		end =document.getElementById("endIP"),
+		mask = document.getElementById("mask"),
+		leaseTime=document.getElementById("leaseTime"),
+		gateway=document.getElementById("gateway"),
+		domain=document.getElementById("domain"),
+		primary=document.getElementById("primaryDNS"),
+		secondary=document.getElementById("backupDNS"),
+		g5start =document.getElementById("g5startIP"),
+		g5end =document.getElementById("g5endIP"),
+		g5mask = document.getElementById("g5mask"),
+		g5leaseTime=document.getElementById("g5leaseTime"),
+		g5gateway=document.getElementById("g5gateway");
+	
+	var start_match,
+		end_match,
+		mask_match,
+		subnet=[];
+	info.wlan2.start=start.value;	
+	start_match=ipv4Match(info.wlan2.start);
+	if(start_match===-1) {
+		error.innerHTML='Wireless 2.4G start ip error';
+		error.style.display='inline';
+		return;
+	}		
+	info.wlan2.end_ip = end.value;
+	end_match=ipv4Match(info.wlan2.end_ip);
+	if(end_match===-1) {
+		error.innerHTML='Wireless 2.4G end ip error';
+		error.style.display='inline';
+		return;
+	}
+	info.wlan2.mask =mask.value;
+	mask_match=ipv4Match(info.wlan2.mask);
+	if(mask_match===-1) {
+		error.innerHTML='Wireless 2.4G netmask ip error';
+		error.style.display='inline';
+		return;
+	}
+	for(var i=1;i<=4;i++) {
+		if((start_match[i]&mask_match[i])!==(end_match[i]&mask_match[i])) {
+			error.innerHTML='Wireless 2.4G IP not in the same network';
+			error.style.display='inline';
+			return;
+		}
+		//subnet 
+		subnet.push(start_match[i]&mask_match[i]);		
+	}	 
+	info.wlan2.subnet=subnet.join('.');
+	if(leaseTime.value.match(/^\d+$/))
+		info.wlan2.lease=leaseTime.value;
+	else {
+		error.innerHTML='Wireless 2.4G lease time must be number';
+		error.style.display='inline';
+		return;
+	}
+	error.style.display='none';	
+	//for 5g part
+	info.wlan5.start=g5start.value;	
+	start_match=ipv4Match(info.wlan5.start);
+	if(start_match===-1) {
+		error.innerHTML='Wireless 5G start ip error';
+		error.style.display='inline';
+		return;
+	}		
+	info.wlan5.end_ip = g5end.value;
+	end_match=ipv4Match(info.wlan5.end_ip);
+	if(end_match===-1) {
+		error.innerHTML='Wireless 5G end ip error';
+		error.style.display='inline';
+		return;
+	}
+	info.wlan5.mask =g5mask.value;
+	mask_match=ipv4Match(info.wlan5.mask);
+	if(mask_match===-1) {
+		error.innerHTML='Wireless 5G netmask ip error';
+		error.style.display='inline';
+		return;
+	}
+	subnet.length=0;
+	for(var i=1;i<=4;i++) {
+		if((start_match[i]&mask_match[i])!==(end_match[i]&mask_match[i])) {
+			error.innerHTML='Wireless 5G IP not in the same network';
+			error.style.display='inline';
+			return;
+		}
+		//subnet 
+		subnet.push(start_match[i]&mask_match[i]);		
+	}	 
+	info.wlan5.subnet=subnet.join('.');
+	if(g5leaseTime.value.match(/^\d+$/))
+		info.wlan5.lease=g5leaseTime.value;
+	else {
+		error.innerHTML='Wireless 5G lease time must be number';
+		error.style.display='inline';
+		return;
+	}
+	error.style.display='none';		
+	
+	if(domain.value)
+		info.domain=domain.value;
+	else {
+		if(info.domain)
+			delete info.domain;
+	}
+	if(primary.value)
+		info.primaryDNS= primary.value;
+	else {
+		if(info.primaryDNS)
+			delete info.primaryDNS;
+	}
+	if(secondary.value)
+		info.secondDNS= secondary.value;
+	else {
+		if(info.secondDNS)
+			delete info.secondDNS;
+	}
+	return 0;
+}
+function loadOneSetting() {	
+	var dhcp_switch=document.getElementById('dhcp_switch'),	
+		start =document.getElementById("startIP"),
+		end =document.getElementById("endIP"),
+		mask = document.getElementById("mask"),
+		leaseTime=document.getElementById("leaseTime"),
+		gateway=document.getElementById("gateway"),
+		g5start =document.getElementById("g5startIP"),
+		g5end =document.getElementById("g5endIP"),
+		g5mask = document.getElementById("g5mask"),
+		g5leaseTime=document.getElementById("g5leaseTime"),
+		g5gateway=document.getElementById("g5gateway"),
+		domain=document.getElementById("domain"),
+		primary=document.getElementById("primaryDNS"),
+		secondary=document.getElementById("backupDNS");
+						
+		(info.dhcp)?dhcp_switch.checked=true:dhcp_switch.checked=false;		
+		start.value=(info.wlan2.start)?info.wlan2.start:'';
+		end.value=(info.wlan2.end_ip)?info.wlan2.end_ip:'';
+		mask.value=(info.wlan2.mask)?info.wlan2.mask:'';
+		leaseTime.value=(info.wlan2.lease)?info.wlan2.lease:'';
+		gateway.value=(info.wlan2.gateway)?info.wlan2.gateway:'';
+		g5start.value=(info.wlan5.start)?info.wlan5.start:'';
+		g5end.value=(info.wlan5.end_ip)?info.wlan5.end_ip:'';
+		g5mask.value=(info.wlan5.mask)?info.wlan5.mask:'';
+		g5leaseTime.value=(info.wlan5.lease)?info.wlan5.lease:'';
+		g5gateway.value=(info.wlan5.gateway)?info.wlan5.gateway:'';
+		domain.value=(info.wlan2.domain)?info.wlan2.domain:'';
+		primary.value=(info.wlan2.primaryDNS)?info.wlan2.primaryDNS:'';
+		secondary.value=(info.wlan2.secondDNS)?info.wlan2.secondDNS:'';	
+}	
+function ipv4Match(str_ip) {
+	var basicM=/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(str_ip);
+	if(basicM ===null)
+		return -1;
+	if(basicM[1]>255||basicM[2]>255||basicM[3]>255||basicM[4]>255)
+		return -1;
+	return basicM;	
+}	
+function showDHCPInfo() {
+	loadOneSetting();
+}
+function fDhcpEnable(obj) {
+	var i,cnt;
+	var dhcp_ebl=obj;
+	var status=dhcp_ebl.checked;
+	//var option_switch =document.getElementById('options_switch'),
+	 //   op_status=option_switch.checked;
+	var all_inputs=util.$id('dhcp_wrapper').getElementsByTagName('input');
+	var all_sels=document.getElementsByTagName('select');
+	if (status)
+	{
+		for(i=0,cnt=all_inputs.length-1;i<cnt;i++) {
+			all_inputs[i].disabled = false;
+		}	
+		for(i=0,cnt=all_sels.length;i<cnt;i++) {
+			all_sels[i].disabled = false;
+		}
+	}
+	else
+	{
+		for(i=0,cnt=all_inputs.length-1;i<cnt;i++) {
+			all_inputs[i].disabled = true;
+		}
+		for(i=0,cnt=all_sels.length;i<cnt;i++) {
+			all_sels[i].disabled = true;
+		}
+	}
+}
+window.onload = function() {
+	var dhcp_switch=document.getElementById('dhcp_switch');
+	var fDHCP= document.getElementsByTagName('form')[0];
+	dhcp_switch.onclick=function(){fDhcpEnable(dhcp_switch);};	
+	
+	fDHCP.onsubmit=function(){var self=this;if(dhcp_switch.checked)info.dhcp=1;else info.dhcp=0;		
+	if(makeJsonInfo()===undefined)return false;
+	//return false;
+	(new XHR()).post(self.action, {data:JSON.stringify(info)},function(){location.reload();});return false;};
+	info=<%=json.encode(dhcpinfo)%>;
+	if(info==false)info={};
+	showDHCPInfo();	
+	fDhcpEnable(dhcp_switch);
+	
+}	
+//]]>
+</script>
+
+<%+footer%>

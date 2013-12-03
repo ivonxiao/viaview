@@ -1,0 +1,20 @@
+<%+header%>
+<h2><a id="content" name="content"><%:System%></a></h2>
+
+<h3><%:Backup&Restore Configuration%></h3>
+	<form method="post" action="<%=REQUEST_URI%>" enctype="multipart/form-data">
+	<div>
+	<p>Click "Download" to download a tar archive of the current configuration files.</p>
+	<label style="display:inline-block;width:30%;font-size:110%"><%:Backup%>:</label>
+			<input class="cbi-button" style="float:none;" type="submit" name="backup" value="<%:Download%>" />
+	</div>	
+	</form>
+	<form method="post" action="<%=REQUEST_URI%>" enctype="multipart/form-data">
+	<div>
+		<p>To restore configuration files, you can upload a previously backuped archive here.</p>
+		<label style="display:inline-block;width:30%;font-size:110%"><%:Restore%>:</label>
+			<input type="file" name="archive" id="archive" required="required" />
+			<input type="submit" class="cbi-button" style="float:none;" name="restore" value="<%:Upload%>" />
+	</div>	
+	</form>
+<%+footer%>

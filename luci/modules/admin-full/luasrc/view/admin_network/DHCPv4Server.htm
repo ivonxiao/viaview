@@ -1,0 +1,948 @@
+<%+header%>
+<%-
+json= require "luci.json"
+sys=require "luci.sys"
+classList={}
+leaseList={}
+dhcpinfo={}
+function ReadDhcpConfig()
+	local start_pos
+	local end_pos,key,idType
+	local optionClass,leaseEntry
+	local idx,idx1
+	local class_cnt,lease_cnt
+	fd=io.open('/etc/dhcp/dhcpd.conf','r')
+	if(fd ==nil) then
+		return
+	end
+	for c in fd:lines(1) do
+		--classname
+		start_pos=string.find(c,'class "')
+		if(start_pos) then
+			end_pos=string.find(c,'"{',start_pos)
+			if(end_pos) then 
+				key=string.sub(c,start_pos+#('class "'),end_pos-1)
+				optionClass={}
+				table.insert(classList,optionClass)
+				optionClass.className=key
+			end	
+		end	
+		--valueType
+		start_pos=string.find(c,'match if')
+		if(start_pos) then
+			valueType =2 
+			end_pos=string.find(c,'binary-to-ascii',start_pos,true)
+			if(end_pos) then 
+				valueType=3
+			end
+			end_pos=string.find(c,'"',start_pos)
+			if(end_pos) then
+				valueType=1				
+			end	
+			optionClass.valueType=valueType
+			--idType
+			start_pos=string.find(c,'agent.circuit-id',1,true)
+			if(start_pos) then				
+				idType =1 	
+			end	
+			start_pos=string.find(c,'agent.remote-id')
+			if(start_pos) then				
+				idType =2 
+			end	
+			optionClass.idType=idType
+			--fromByte
+			start_pos=string.find(c,',',start_pos)
+			if(start_pos) then 
+				end_pos=string.find(c,',',start_pos+1)
+				if(end_pos) then
+					fromByte=string.sub(c,start_pos+1,end_pos-1)
+					--print(fromByte)
+					optionClass.fromByte=tonumber(fromByte)
+				end
+				--valueLen
+				start_pos=string.find(c,')',end_pos+1)
+				if(start_pos) then
+					valueLength=string.sub(c,end_pos+1,start_pos-1)
+					--print(valueLength)
+					optionClass.byteLen=tonumber(valueLength)
+				end
+				--option value
+				end_pos=string.find(c,'= "',start_pos)
+				if(end_pos) then
+					start_pos=string.find(c,'"',end_pos+#('= "'))
+					if(start_pos) then
+						optionV=string.sub(c,end_pos+#('= "'),start_pos-1)
+						--print(optionV)
+						optionClass.optionV=optionV
+					end
+				else
+					end_pos=string.find(c,'= ',start_pos+1)
+					if(end_pos) then
+						start_pos=string.find(c,';',end_pos+#('= '))
+						if(start_pos) then
+							optionV=string.sub(c,end_pos+(#('= ')),start_pos-1)
+							--print(optionV)
+							optionClass.optionV=optionV
+						end
+					end
+				end	
+			end	
+			
+		end	
+		start_pos=string.find(c,'netmask ')
+		if(start_pos) then
+			end_pos=string.find(c,' {',start_pos+#('netmask '))
+			if(end_pos) then 
+				mask=string.sub(c,start_pos+#('netmask '),end_pos-1)
+				leaseEntry={}
+				table.insert(leaseList,leaseEntry)
+				leaseEntry.option=0
+				leaseEntry.mask=mask
+			end	
+		end	
+		start_pos=string.find(c,'allow members of "')
+		if(start_pos) then
+			end_pos=string.find(c,'";')
+			if(end_pos) then 
+				bindClass=string.sub(c,start_pos+#('allow members of "'),end_pos-1)
+				--print(bindClass)
+				leaseEntry.className=bindClass
+			end	
+		end	
+		start_pos=string.find(c,'range ')
+		if(start_pos) then
+			end_pos=string.find(c,' ',start_pos+#('range '))
+			if(end_pos) then 
+				start=string.sub(c,start_pos+#('range '),end_pos-1)
+				--print(start)
+				leaseEntry.start=start
+			end	
+			start_pos=string.find(c,';',end_pos+#(' '))
+			if(end_pos) then 
+				end_ip=string.sub(c,end_pos+#(' '),start_pos-1)
+				--print(end_ip)
+				leaseEntry.end_ip=end_ip
+			end	
+		end	
+		start_pos=string.find(c,'option domain-name-servers ',1,true)
+		if(start_pos) then
+			end_pos=string.find(c,',',start_pos+#('option domain-name-servers '))
+			if(end_pos) then 
+				primaryDNS=string.sub(c,start_pos+#('option domain-name-servers '),end_pos-1)
+				if(leaseEntry) then
+					leaseEntry.primaryDNS=primaryDNS
+				end	
+				start_pos=string.find(c,';',end_pos+#(','))
+				if(start_pos) then 
+					secondaryDNS=string.sub(c,end_pos+#(','),start_pos-1)
+					if(leaseEntry) then
+						leaseEntry.secondDNS=secondaryDNS
+					end	
+				end	
+			else
+				end_pos=string.find(c,';',start_pos+#('option domain-name-servers '))
+				if(end_pos) then
+					primaryDNS=string.sub(c,start_pos+#('option domain-name-servers '),end_pos-1)
+					if(leaseEntry) then
+						leaseEntry.primaryDNS=primaryDNS
+					end	
+				end	
+			end	
+		end	
+		start_pos=string.find(c,'option domain-name "',1,true)
+		if(start_pos) then
+			end_pos=string.find(c,'";',start_pos+#('option domain-name "'))
+			domain=string.sub(c,start_pos+#('option domain-name "'),end_pos-1)
+			if(leaseEntry) then
+				leaseEntry.domain=domain
+			end	
+		end	
+		start_pos=string.find(c,'option routers ')
+		if(start_pos) then
+			end_pos=string.find(c,';',start_pos+#('option routers '))
+			gateway=string.sub(c,start_pos+#('option routers '),end_pos-1)
+			if(leaseEntry) then
+				leaseEntry.gateway=gateway
+			end	
+		end	
+		start_pos=string.find(c,'default-lease-time ',1,true)
+		if(start_pos) then
+			end_pos=string.find(c,';',start_pos+#('default-lease-time '))
+			lease=string.sub(c,start_pos+#('default-lease-time '),end_pos-1)
+			if(leaseEntry) then
+				leaseEntry.lease=tonumber(lease)
+			end	
+		end	
+		start_pos=string.find(c,'INTERFACE eth0')
+		if(start_pos) then			
+			leaseEntry.eth=0
+			if(dhcpinfo.eth1 == nil) then
+				dhcpinfo.eth1={}
+			end	
+			table.insert(dhcpinfo.eth1,leaseEntry)
+		end	
+		start_pos=string.find(c,'INTERFACE eth1')
+		if(start_pos) then			
+			leaseEntry.eth=1
+			if(dhcpinfo.eth2 == nil) then
+				dhcpinfo.eth2={}
+			end	
+			table.insert(dhcpinfo.eth2,leaseEntry)
+		end	
+		start_pos=string.find(c,'INTERFACE eth2')
+		if(start_pos) then			
+			leaseEntry.eth=2
+			if(dhcpinfo.eth3 == nil) then
+				dhcpinfo.eth3={}
+			end	
+			table.insert(dhcpinfo.eth3,leaseEntry)
+		end	
+		start_pos=string.find(c,'INTERFACE eth3')
+		if(start_pos) then			
+			leaseEntry.eth=3
+			if(dhcpinfo.eth4 == nil) then
+				dhcpinfo.eth4={}
+			end	
+			table.insert(dhcpinfo.eth4,leaseEntry)
+		end	
+	end	
+	io.close(fd)
+	-- save class option to lease list
+	class_cnt=#classList
+	lease_cnt=#leaseList
+	idx=1	
+	while(idx<=lease_cnt) do
+		idx1=1
+		while(idx1<=class_cnt) do			
+			if((leaseList[idx].className == classList[idx1].className) and leaseList[idx].className) then
+				leaseList[idx].idType=classList[idx1].idType
+				leaseList[idx].valueType=classList[idx1].valueType
+				leaseList[idx].fromByte=classList[idx1].fromByte
+				leaseList[idx].byteLen=classList[idx1].byteLen
+				leaseList[idx].optionV=classList[idx1].optionV
+				leaseList[idx].option=1
+				break
+			end
+			idx1=idx1+1			
+		end
+		idx=idx+1
+	end	
+	
+	local function list2object(list) 
+		if(list) then
+			if(#(list) == 1) then
+				list=list[1]
+			end
+		return list	
+		end		
+	end
+	dhcpinfo.eth1=list2object(dhcpinfo.eth1)
+	dhcpinfo.eth2=list2object(dhcpinfo.eth2)
+	dhcpinfo.eth3=list2object(dhcpinfo.eth3)
+	dhcpinfo.eth4=list2object(dhcpinfo.eth4)
+	dhcpinfo.dhcp=0
+	--os.execute('rm -f /var/dhcpinfostatus')
+	--os.execute('find /var/run/dhcpd.pid|wc -l>>/var/dhcpinfostatus  ')
+	--line_fun=io.lines('/var/dhcpinfostatus')
+    os.execute('rm -f /var/ac/dhcpstatus')
+	os.execute('/etc/init.d/isc-dhcp-server status >> /var/ac/dhcpstatus')
+	fd=io.open('/var/ac/dhcpstatus','r')
+	if(fd ~=nil) then
+		for c in fd:lines(1) do
+			start_pos=string.find(c,'dhcpd is running')
+			if(start_pos) then
+				dhcpinfo.dhcp=1
+				break				
+			end
+		end
+	end	
+	io.close(fd)
+
+end
+function readRelayConf()
+	local ret
+	ipInfo={}
+	ethSel={}
+	os.execute('rm -f /var/dhcprelaystatus')
+	ret=os.execute('uci get dhcrelay.ipv4.disabled>> /var/dhcprelaystatus')
+	ret=os.execute('uci get dhcrelay.ipv4.dhcpserver>> /var/dhcprelaystatus')
+	os.execute('echo "--------" >>/var/dhcprelaystatus')
+	ret=os.execute('uci get dhcrelay.ipv4.listen_if>> /var/dhcprelaystatus')	
+	tmp=ipInfo
+	fd=io.open('/var/dhcprelaystatus','r')
+	if(fd ~=nil) then
+		for c in fd:lines(1) do
+			if(string.find(c,'-+')) then
+				tmp=ethSel
+			else	
+				for v in string.gmatch(c,"[^%s]+") do
+					table.insert(tmp,v)	
+				end	
+			end		
+		end
+	end	
+	io.close(fd)	
+end
+function showEthStaticIp(eth)
+	os.execute('rm -f /var/dhcprelaystatus')
+	ret=os.execute('uci get network.' .. eth ..'.ipaddr>> /var/dhcprelaystatus')
+	if(ret==0) then
+		fd=io.open('/var/dhcprelaystatus','r')
+		if(fd ~=nil) then
+			for c in fd:lines(1) do
+				rets='IP:' .. c
+				break
+			end	
+		end
+		io.close(fd)
+	else 
+		rets='No static IP'
+	end	
+	return rets		
+end
+ReadDhcpConfig()
+readRelayConf()
+-%>
+<style>
+	 #maincontent ul {margin:0;list-style:none}
+	 #error_span{margin-left:5em;padding:10px;color:#f00;font-size:1.2em;background:#cc0;border-radius:15px 15px;display:none}
+	 table{border-spacing:0;border-collapse:collapse;max-height:10em;overflow:auto;display:block}
+	th,td{width:160px;border:1px solid #ccc;text-align:left;height:20px}
+	fieldset ul ul{border:1px solid #ccc none}
+	fieldset li{clear:left;padding:0.25em 0;border-bottom:1px dotted #bbb}
+	li.last-item{border:none}
+	select{width:155px}
+	input:disabled,select:disabled{background:#ccc}
+</style>
+	<h2><a id="content" name="content"><%:DHCP IPv4 Setting%></a></h2>
+	<div class="cbi-map-descr">User can set IPv4 <abbr title="Dynamic Host Configuration Protocol">DHCP</abbr> server and DHCP Relay.
+	<span id="error_span"></span>
+	</div>
+	<fieldset class="cbi-section">
+		<legend>DHCP Server Configuration Infomation</legend>
+	<table>
+		<thead>
+		<tr>
+			<th>NO.</th>
+			<th>Start IP Address</th>
+			<th>End IP Address</th>
+			<th>IP Netmask</th>
+		</tr>
+		</thead>
+		<tbody  id="dhcpinfo">			
+		</tbody>
+	</table>
+	</fieldset>
+	<form method="post" name="fDHCP" action="<%=controller%>/admin/network/DHCPConfigSave">
+	<fieldset class="cbi-section">
+		<legend>DHCP Configuration</legend>
+		<ul>
+			<li>
+				<input type="checkbox" name="dhcp_switch" id="dhcp_switch"  />
+				<label for="dhcp_switch" class="cbi-value-title">Enable DHCP Server</label>
+			</li>
+			<li>
+				<input type="checkbox" name="dhcp_relay" id="dhcp_relay" <%if(tonumber(ipInfo[1])==0)then %> checked="checked" <% end%> />
+				<label for="dhcp_relay" class="cbi-value-title">Enable DHCP Relay</label>				
+			</li>
+		</ul>
+		<ul style="display:none" id="relay_wrapper">				
+			<li>
+				<input type="checkbox" name="ifeth1" id="ifeth1" /><label for="ifeth1">Eth1</label>(<%=showEthStaticIp('lan0')%>)				
+				<input type="input" name="relay_eth1" id="relay_eth1" style="margin-right:10%;float:right" disabled="disabled" />			
+				<label for="relay_eth1" class="cbi-value-title">DHCP Server IP:</label>
+			</li>
+			<li>
+				<input type="checkbox" name="ifeth2" id="ifeth2" /><label for="ifeth2">Eth2</label>(<%=showEthStaticIp('lan1')%>)	
+				<input type="input" name="relay_eth2" id="relay_eth2" style="margin-right:10%;float:right" disabled="disabled" />
+				<label for="relay_eth2" class="cbi-value-title">DHCP Server IP:</label>
+			</li>
+			<li>
+				<input type="checkbox" name="ifeth3" id="ifeth3" /><label for="ifeth3">Eth3</label>(<%=showEthStaticIp('lan2')%>)	
+				<input type="input" name="relay_eth3" id="relay_eth3" style="margin-right:10%;float:right" disabled="disabled" />
+				<label for="relay_eth3" class="cbi-value-title">DHCP Server IP:</label>
+			</li>
+			<li class="last-item">
+				<input type="checkbox" name="ifeth4" id="ifeth4" /><label for="ifeth4">Eth4</label>(<%=showEthStaticIp('lan3')%>)	
+				<input type="input" name="relay_eth4" id="relay_eth4" style="margin-right:10%;float:right" disabled="disabled" />
+				<label for="relay_eth4" class="cbi-value-title">DHCP Server IP:</label>
+			</li>			
+			<input type="submit" value="Apply" />
+		</ul>
+		<ul id="dhcp_wrapper">	
+			<li>
+				<input type="checkbox" name="options_switch" id="options_switch"  />
+				<label for="options_switch" class="cbi-value-title">Enable DHCP Option82</label>
+				<ul>
+					<li>
+						<label for="classN" class="cbi-value-title">Class :</label>
+						<input type="input" name="classN" id="classN" disabled="disabled"  />
+					</li>
+					<li>
+						<label for="idType" class="cbi-value-title">ID-Type :</label>
+						<select name="idType" id="idType" disabled="disabled">
+							<option>Circuit ID</option>
+							<option>Remote ID</option>
+						</select>
+					</li>
+					<li>
+						<label for="valueType" class="cbi-value-title">Value Type :</label>
+						<select name="valueType" id="valueType" disabled="disabled">
+							<option>ASCII</option>
+							<option>Binary</option>
+							<option>String</option>
+						</select>
+					</li>
+					<li>
+						<label for="fromByte" class="cbi-value-title">From Byte :</label>
+						<input type="input" name="fromByte" id="fromByte" disabled="disabled" />
+					</li>
+					<li>
+						<label for="byteLen" class="cbi-value-title">Byte Len :</label>
+						<input type="input" name="byteLen" id="byteLen" disabled="disabled" />
+					</li>
+					<li  class="last-item">
+						<label for="optionValue" class="cbi-value-title">Value :</label>
+						<input type="input" name="optionValue" id="optionValue" disabled="disabled"  />
+					</li>
+				</ul>
+			</li>
+			<li>
+				<label for="Ethes" class="cbi-value-title">Bind Eth :</label>
+				<select name="Ethes" id="Ethes">
+					<option value="eth1">Eth1</option>
+					<option value="eth2">Eth2</option>
+					<option value="eth3">Eth3</option>
+					<option value="eth4">Eth4</option>
+				</select>
+			</li>
+			<li>
+				<label for="startIP" class="cbi-value-title">Start IP Address :</label>						
+				<input type="input" name="startIP" id="startIP" />
+			</li>
+			<li>
+				<label for="endIP" class="cbi-value-title">End IP Address :</label>						
+				<input type="input" name="endIP" id="endIP" />
+			</li>
+			<li>
+				<label for="mask" class="cbi-value-title">Netmask :</label>						
+				<input type="input" name="mask" id="mask" />
+			</li>
+			<li>
+				<label for="leaseTime" class="cbi-value-title">Lease Time :</label>						
+				<input type="input" name="leaseTime" id="leaseTime" />
+			</li>
+			<li>
+				<label for="gateway" class="cbi-value-title">Gateway :</label>						
+				<input type="input" name="gateway" id="gateway" />
+			</li>
+			<li>
+				<label for="domain" class="cbi-value-title">Domain :</label>						
+				<input type="input" name="domain" id="domain" />
+			</li>
+			<li>
+				<label for="primaryDNS" class="cbi-value-title">Primary DNS :</label>						
+				<input type="input" name="primaryDNS" id="primaryDNS" />
+			</li>
+			<li class="last-item">
+				<label for="backupDNS" class="cbi-value-title">Secondary DNS :</label>						
+				<input type="input" name="backupDNS" id="backupDNS" />
+			</li>	
+			<input type="button" name="save" id="save" value="Add" />
+			<input type="button" name="modify" id="modify" value="Modify" />
+			<input type="button" name="del" id="del" value="Delete" />						
+			<input type="submit" value="Apply" />	
+		</ul>
+
+	</fieldset>	
+	</form>			
+<script type="text/javascript" src="<%=resource%>/util.js"></script>
+<script>
+//<![CDATA[
+var global={
+	selectedID:-2,
+	selectedSubID:-2
+}	
+var info={}
+function relayEnable(eth,oip) {
+	if(eth.checked===false)
+		oip.disabled=true;
+	else
+		oip.disabled=false;
+}	
+function loadOneSetting(clickObj) {
+	var target=document.getElementById('dhcpinfo').rows;
+	for(var i=0,l=target.length;i<l;i++) {
+		target[i].style.background='';
+	}	
+	clickObj.style.background='#6cf';
+	var mat=clickObj.id.match(/eth(\d)_(\d)/);
+	var eth_id=-1,
+		eth_subid=-1;
+	if(mat) { //more than 1 setting of ether,format as 'eth1_1 or eth1'
+		eth_id=mat[1];
+		eth_subid=mat[2];
+	}	
+	else
+		eth_id=+clickObj.id.charAt(3);
+	global.selectedID=eth_id;
+	global.selectedSubID=eth_subid;
+	
+	var dhcp_switch=document.getElementById('dhcp_switch'),
+		option_switch =document.getElementById('options_switch'),
+		classN=document.getElementById("classN"),
+		idType=document.getElementById("idType"),
+		valueType=document.getElementById("valueType"),
+		fromByte=document.getElementById("fromByte"),
+		byteLen=document.getElementById("byteLen"),
+		optionVal=document.getElementById("optionValue"),
+		start =document.getElementById("startIP"),
+		end =document.getElementById("endIP"),
+		mask = document.getElementById("mask"),
+		leaseTime=document.getElementById("leaseTime"),
+		gateway=document.getElementById("gateway"),
+		domain=document.getElementById("domain"),
+		primary=document.getElementById("primaryDNS"),
+		secondary=document.getElementById("backupDNS"),
+		sel=document.getElementById('Ethes');
+	fDhcpEnable(dhcp_switch);
+	fOptionEnable(dhcp_switch.checked,option_switch.checked);				
+	if(eth_subid !==-1) {
+		(info['eth'+eth_id][eth_subid].option)?option_switch.checked=true:option_switch.checked=false;
+		classN.value=(info['eth'+eth_id][eth_subid].className)?info['eth'+eth_id][eth_subid].className:'';
+		idType.selectedIndex=(info['eth'+eth_id][eth_subid].idType)?(info['eth'+eth_id][eth_subid].idType -1):0;
+		valueType.selectedIndex=(info['eth'+eth_id][eth_subid].valueType)?(info['eth'+eth_id][eth_subid].valueType -1):0;
+		fromByte.value=(info['eth'+eth_id][eth_subid].fromByte)?info['eth'+eth_id][eth_subid].fromByte:'';
+		byteLen.value=(info['eth'+eth_id][eth_subid].byteLen)?info['eth'+eth_id][eth_subid].byteLen:'';
+		optionVal.value=(info['eth'+eth_id][eth_subid].optionV)?info['eth'+eth_id][eth_subid].optionV:'';
+		start.value=(info['eth'+eth_id][eth_subid].start)?info['eth'+eth_id][eth_subid].start:'';
+		end.value=(info['eth'+eth_id][eth_subid].end_ip)?info['eth'+eth_id][eth_subid].end_ip:'';
+		mask.value=(info['eth'+eth_id][eth_subid].mask)?info['eth'+eth_id][eth_subid].mask:'';
+		leaseTime.value=(info['eth'+eth_id][eth_subid].lease)?info['eth'+eth_id][eth_subid].lease:'';
+		gateway.value=(info['eth'+eth_id][eth_subid].gateway)?info['eth'+eth_id][eth_subid].gateway:'';
+		domain.value=(info['eth'+eth_id][eth_subid].domain)?info['eth'+eth_id][eth_subid].domain:'';
+		primary.value=(info['eth'+eth_id][eth_subid].primaryDNS)?info['eth'+eth_id][eth_subid].primaryDNS:'';
+		secondary.value=(info['eth'+eth_id][eth_subid].secondDNS)?info['eth'+eth_id][eth_subid].secondDNS:'';
+		sel.selectedIndex=eth_id -1;
+	}
+	else {
+		(info['eth'+eth_id].option)?option_switch.checked=true:option_switch.checked=false;
+		classN.value=(info['eth'+eth_id].className)?info['eth'+eth_id].className:'';
+		idType.selectedIndex=(info['eth'+eth_id].idType)?(info['eth'+eth_id].idType -1):0;
+		valueType.selectedIndex=(info['eth'+eth_id].valueType)?(info['eth'+eth_id].valueType -1):0;
+		fromByte.value=(info['eth'+eth_id].fromByte)?info['eth'+eth_id].fromByte:'';
+		byteLen.value=(info['eth'+eth_id].byteLen)?info['eth'+eth_id].byteLen:'';
+		optionVal.value=(info['eth'+eth_id].optionV)?info['eth'+eth_id].optionV:'';
+		start.value=(info['eth'+eth_id].start)?info['eth'+eth_id].start:'';
+		end.value=(info['eth'+eth_id].end_ip)?info['eth'+eth_id].end_ip:'';
+		mask.value=(info['eth'+eth_id].mask)?info['eth'+eth_id].mask:'';
+		leaseTime.value=(info['eth'+eth_id].lease)?info['eth'+eth_id].lease:'';
+		gateway.value=(info['eth'+eth_id].gateway)?info['eth'+eth_id].gateway:'';
+		domain.value=(info['eth'+eth_id].domain)?info['eth'+eth_id].domain:'';
+		primary.value=(info['eth'+eth_id].primaryDNS)?info['eth'+eth_id].primaryDNS:'';
+		secondary.value=(info['eth'+eth_id].secondDNS)?info['eth'+eth_id].secondDNS:'';
+		sel.selectedIndex=eth_id -1;
+	}		
+}	
+function ipv4Match(str_ip) {
+	var basicM=/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(str_ip);
+	if(basicM ===null)
+		return -1;
+	if(basicM[1]>255||basicM[2]>255||basicM[3]>255||basicM[4]>255)
+		return -1;
+	return basicM;	
+}	
+function newDHCPSetByEth() {
+	info.dhcp=(document.getElementById('dhcp_switch').checked)?1:0;  //dhcp
+	if(info.dhcp===0)return null;
+	var error=document.getElementById('error_span');
+	var option_switch =document.getElementById('options_switch'),
+		classN=document.getElementById("classN"),
+		idType=document.getElementById("idType"),
+		valueType=document.getElementById("valueType"),
+		fromByte=document.getElementById("fromByte"),
+		byteLen=document.getElementById("byteLen"),
+		optionVal=document.getElementById("optionValue"),
+		start =document.getElementById("startIP"),
+		end =document.getElementById("endIP"),
+		mask = document.getElementById("mask"),
+		leaseTime=document.getElementById("leaseTime"),
+		gateway=document.getElementById("gateway"),
+		domain=document.getElementById("domain"),
+		primary=document.getElementById("primaryDNS"),
+		secondary=document.getElementById("backupDNS"),
+	    sel=document.getElementById('Ethes').selectedIndex;
+	var list={};
+	list.option=(option_switch.checked)?1:0;
+	list.eth=sel;
+	if(list.option) {
+		list.className=classN.value;
+		if(list.className==='') {
+			error.innerHTML='class name required';
+			error.style.display='inline';
+			return;
+		}	
+		if(idType.selectedIndex ==1)
+			list.idType=2;
+		else 
+			list.idType=1;
+
+		list.valueType=valueType.selectedIndex +1;
+		if(fromByte.value.match(/^\d+$/))		
+			list.fromByte=fromByte.value;
+		else {
+			error.innerHTML='from byte must be number';
+			error.style.display='inline';
+			return;
+		}	
+		if(byteLen.value.match(/^\d+$/))		
+			list.byteLen =byteLen.value;
+		else {
+			error.innerHTML='byte length must be number';
+			error.style.display='inline';
+			return;
+		}		
+		list.optionV =optionVal.value;	
+		if(list.optionV==='') {
+			error.innerHTML='Option value required';
+			error.style.display='inline';
+			return;
+		}	
+	}	
+	var start_match,
+		end_match,
+		mask_match,
+		subnet=[];
+	list.start=start.value;	
+	start_match=ipv4Match(list.start);
+	if(start_match===-1) {
+		error.innerHTML='start ip error';
+		error.style.display='inline';
+		return;
+	}		
+	list.end_ip = end.value;
+	end_match=ipv4Match(list.end_ip);
+	if(end_match===-1) {
+		error.innerHTML='end ip error';
+		error.style.display='inline';
+		return;
+	}
+	list.mask =mask.value;
+	mask_match=ipv4Match(list.mask);
+	if(mask_match===-1) {
+		error.innerHTML='netmask ip error';
+		error.style.display='inline';
+		return;
+	}
+	for(var i=1;i<=4;i++) {
+		if((start_match[i]&mask_match[i])!==(end_match[i]&mask_match[i])) {
+			error.innerHTML='start IP and end IP not in the same network';
+			error.style.display='inline';
+			return;
+		}
+		//subnet 
+		subnet.push(start_match[i]&mask_match[i]);		
+	}	 
+	list.subnet=subnet.join('.');
+	if(leaseTime.value.match(/^\d+$/))
+		list.lease=leaseTime.value;
+	else {
+		error.innerHTML='lease time must be number';
+		error.style.display='inline';
+		return;
+	}
+	error.style.display='none';		
+	if(gateway.value)
+		list.gateway=gateway.value;	
+	if(domain.value)
+		list.domain=domain.value
+	if(primary.value)
+		list.primaryDNS= primary.value;
+	if(secondary.value)
+		list.secondDNS= secondary.value;
+	return list;
+}	
+function showRelayInfo() {
+	var eth1=util.$id('relay_eth1'),
+		eth2=util.$id('relay_eth2'),
+		eth3=util.$id('relay_eth3'),
+		eth4=util.$id('relay_eth4');
+	if(global.relay.eth0 && eth1)
+		eth1.value=global.relay.eth0;
+	if(global.relay.eth1 && eth2)
+		eth2.value=global.relay.eth1;
+	if(global.relay.eth2 && eth3)
+		eth3.value=global.relay.eth2;
+	if(global.relay.eth3 && eth4)
+		eth4.value=global.relay.eth3;	
+}		
+function showDHCPInfo() {
+	var target=document.getElementById('dhcpinfo');
+	var dhcp=document.getElementById('dhcp_switch');
+	if(info.dhcp)dhcp.checked=true;
+	else dhcp.checked=false;
+	fDhcpEnable(dhcp);
+	var i,
+		tmp,
+		cnt=0,
+		str_insert='',
+		row,
+		cell;
+	//target.innerHTML='';
+	for(i=target.rows.length-1;i>=0;i--) {
+		target.deleteRow(i);
+	}	
+	function subnet(start,mask) {
+		var tmp=start.split('.');
+		var tmp1=mask.split('.');
+		var len=tmp.length-1,
+			ret='';
+		for(var i=0;i<len;i++)
+			ret+=(tmp[i]&tmp1[i]) +'.';
+		ret	+=tmp[len]&tmp1[len];
+		return ret;
+	}	
+	for(i=1;i<5;i++) {
+		tmp =info['eth'+i];
+		if(tmp) {
+			if(tmp.length) {
+				cnt=tmp.length;
+				for(var j=0;j<cnt;j++) {							
+					row=document.createElement('tr');
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode('eth'+i));
+					row.appendChild(cell);
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode(tmp[j].start));
+					row.appendChild(cell);
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode(tmp[j].end_ip));
+					row.appendChild(cell);
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode(tmp[j].mask));
+					row.appendChild(cell);
+					target.appendChild(row);
+					row.id='eth'+i+'_'+j;
+					row.onclick=function(){var self=this;loadOneSetting(self);}
+					if(!tmp[j].subnet)
+						tmp[j].subnet=subnet(tmp[j].start,tmp[j].mask);
+				}	
+			}
+			else {							
+					row=document.createElement('tr');
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode('eth'+i));
+					row.appendChild(cell);
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode(tmp.start));
+					row.appendChild(cell);
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode(tmp.end_ip));
+					row.appendChild(cell);
+					cell=document.createElement('td');
+					cell.appendChild(document.createTextNode(tmp.mask));
+					row.appendChild(cell);
+					target.appendChild(row);
+					row.id='eth'+i;
+					row.onclick=function(){var self=this;loadOneSetting(self);}
+					if(!tmp.subnet)
+						tmp.subnet=subnet(tmp.start,tmp.mask);
+			}
+		}		
+	}
+}
+function fDhcpEnable(obj) {
+	var i,cnt;
+	var dhcp_ebl=obj;
+	var status=dhcp_ebl.checked;
+	//var option_switch =document.getElementById('options_switch'),
+	 //   op_status=option_switch.checked;
+	var all_inputs=util.$id('dhcp_wrapper').getElementsByTagName('input');
+	var all_sels=document.getElementsByTagName('select');
+	if (status)
+	{
+		for(i=0,cnt=all_inputs.length-4;i<cnt;i++) {
+			all_inputs[i].disabled = false;
+		}	
+		for(i=0,cnt=all_sels.length;i<cnt;i++) {
+			all_sels[i].disabled = false;
+		}
+	}
+	else
+	{
+		for(i=0,cnt=all_inputs.length-4;i<cnt;i++) {
+			all_inputs[i].disabled = true;
+		}
+		for(i=0,cnt=all_sels.length;i<cnt;i++) {
+			all_sels[i].disabled = true;
+		}
+	}
+}
+function fOptionEnable(dhcp_status,self_status){
+	var status=self_status;
+
+	if (dhcp_status != false && status)
+	{
+		document.getElementById("classN").disabled=false;
+		document.getElementById("idType").disabled=false;
+		document.getElementById("valueType").disabled=false;
+		document.getElementById("fromByte").disabled=false;
+		document.getElementById("byteLen").disabled=false;
+		document.getElementById("optionValue").disabled=false;
+	}
+	else
+	{
+		document.getElementById("classN").disabled=true;
+		document.getElementById("idType").disabled=true;
+		document.getElementById("valueType").disabled=true;
+		document.getElementById("fromByte").disabled=true;
+		document.getElementById("byteLen").disabled=true;
+		document.getElementById("optionValue").disabled=true;
+	}
+}
+function matchRelay() {
+	var relay1=util.$id('relay_eth1'),
+		relay2=util.$id('relay_eth2'),
+		relay3=util.$id('relay_eth3'),
+		relay4=util.$id('relay_eth4'),
+		ip1=relay1.value,
+		ip2=relay2.value,
+		ip3=relay3.value,
+		ip4=relay4.value;
+	var error=document.getElementById('error_span');
+	var ret=0;	
+	function ipCheck(sip,idx) {
+		if(sip!=='') {
+			var ret=ipv4Match(sip);
+			if(ret==-1) {
+				error.innerHTML='Eth'+idx+' Relay IP address is wrong';
+				error.style.display='inline';
+				return -1;
+			}
+		}
+		return 0;	
+	}	
+	if(!(relay1.disabled)) {
+		ret=ipCheck(ip1,1);
+		if(ret===-1) return ret;
+		info.relay1=ip1;
+	}	
+	if(!(relay2.disabled)) {
+		ret=ipCheck(ip2,2);
+		if(ret===-1) return ret;
+		info.relay2=ip2;
+	}	
+	if(!(relay3.disabled)) {
+		ret=ipCheck(ip3,3);
+		if(ret===-1) return ret;
+		info.relay3=ip3;
+	}	
+	if(!(relay4.disabled)) {
+		ret=ipCheck(ip4,4);
+		if(ret===-1) return ret;
+		info.relay4=ip4;
+	}	
+	return ret
+}	
+
+window.onload = function() {
+	var dhcp_switch=document.getElementById('dhcp_switch');
+	var option_switch =document.getElementById('options_switch');
+	var relay_switch=util.$id('dhcp_relay');
+	var save = document.getElementById('save'),
+		modify=document.getElementById('modify'),
+		del  =document.getElementById('del');
+	var fDHCP= document.getElementsByTagName('form')[0];
+	dhcp_switch.onclick=function(){fDhcpEnable(dhcp_switch);fOptionEnable(this.checked,option_switch.checked);
+	util.uniqueSel(this,relay_switch,util.$id('dhcp_wrapper'),util.$id('relay_wrapper')); };
+	relay_switch.onclick=function(){util.uniqueSel(this,dhcp_switch,util.$id('relay_wrapper'),util.$id('dhcp_wrapper'));}
+	option_switch.onclick=function(){var _self=this;fOptionEnable(dhcp_switch.checked,_self.checked)};
+	util.$id('ifeth1').onchange=function(){relayEnable(this,util.$id('relay_eth1'))};
+	util.$id('ifeth2').onchange=function(){relayEnable(this,util.$id('relay_eth2'))};
+	util.$id('ifeth3').onchange=function(){relayEnable(this,util.$id('relay_eth3'))};
+	util.$id('ifeth4').onchange=function(){relayEnable(this,util.$id('relay_eth4'))};
+	fDHCP.onsubmit=function(){var self=this;if(dhcp_switch.checked)info.dhcp=1;else info.dhcp=0;
+	if(relay_switch.checked){
+		info.relay=1;
+		if(-1===matchRelay())return false;
+	}else info.relay=0;
+	//return false;}
+	(new XHR()).post(self.action, {data:JSON.stringify(info)},function(){location.reload();});return false;};
+	del.onclick=function() {
+		if(global.selectedID===-2) //don't selected
+			return;
+		if(global.selectedSubID===-1) { //this eth have 1 record
+			delete info['eth'+global.selectedID];
+		}
+		else {
+			info['eth'+global.selectedID].splice(global.selectedSubID,1);
+			if(info['eth'+global.selectedID].length===1) {
+				info['eth'+global.selectedID]=info['eth'+global.selectedID][0];
+			}	
+		}
+		showDHCPInfo();	
+		global.selectedID=-2;
+	};
+	modify.onclick=function () {
+		var record;
+		if(global.selectedID===-2) //don't selected
+			return;
+		if(global.selectedSubID===-1) { //this eth have 1 record
+			record=newDHCPSetByEth();
+			if(record)info['eth'+global.selectedID]=record;
+		}
+		else {
+			record=newDHCPSetByEth();
+			if(record)info['eth'+global.selectedID][global.selectedSubID]=record;
+		}
+		showDHCPInfo();
+		global.selectedID=-2;
+	}	
+	save.onclick =function(){
+			var sel=document.getElementById('Ethes');
+			var key=sel.options[sel.selectedIndex].value;
+			var record;		
+			
+			if(info[key] ===undefined) {
+				record=newDHCPSetByEth();				
+				if(record) {
+					//record.eth=+(key.charAt(3))-1;
+					info[key]=record;
+				}	
+			}
+			else {
+				var tmp_list=info[key];				
+				ret=newDHCPSetByEth();				
+				if(ret) {
+					if(tmp_list.length ===undefined) {
+						info[key]=[];
+						info[key].push(tmp_list);
+					}	
+					info[key].push(ret);	
+				}			
+			}
+			showDHCPInfo();							
+	};
+	info=<%=json.encode(dhcpinfo)%>;
+	if(info==false)info={};
+	showDHCPInfo();
+	
+	fDhcpEnable(dhcp_switch);fOptionEnable(dhcp_switch.checked,option_switch.checked);
+	global.relay={};
+	<%		
+	for v=2,#ipInfo,1 do
+		local eth,ip=string.sub(ethSel[v-1],1,4),ipInfo[v]
+	%>		
+	global.relay.<%=eth%>='<%=ip%>';
+	util.$id('ifeth'+(parseInt('<%=eth%>'.slice(-1),10)+1)).checked=true;
+	util.$id('relay_eth'+(parseInt('<%=eth%>'.slice(-1),10)+1)).disabled=false;
+	<%end%>	
+	<%if(tonumber(ipInfo[1])==0)then %> 
+	util.uniqueSel(relay_switch,dhcp_switch,util.$id('relay_wrapper'),util.$id('dhcp_wrapper'));
+	<% end%>
+	showRelayInfo();
+}	
+//]]>
+</script>
+
+<%+footer%>
