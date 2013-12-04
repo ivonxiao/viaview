@@ -633,7 +633,7 @@ config wifi-iface
 	option device   'radio$devidx'
 	option network  'lan wlan5'
 	option mode     'ap'
-	option ssid     'VIA_5G'
+	option ssid     'VN5901_5G
 	option encryption 'none'
 EOF
         fi
@@ -661,7 +661,7 @@ config wifi-iface
 	option device 'radio$devidx'
 	option mode 'ap'
 	option encryption 'none'
-	option ssid 'VIA_2.4G'
+	option ssid 'VN5901_2.4G'
 	option network 'lan wlan'
 $dev_id
 EOF2

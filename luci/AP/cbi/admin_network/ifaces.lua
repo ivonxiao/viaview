@@ -217,7 +217,7 @@ p_switch.inputstyle = "apply"
 
 local _, pr
 for _, pr in ipairs(nw:get_protocols()) do
-	if (pr:proto()=="static" or pr:proto() == "dhcp") then
+	if (pr:proto()=="static" or pr:proto() == "dhcp" or pr:proto() == "pppoe") then
 	p:value(pr:proto(), pr:get_i18n())
 	end
 	if pr:proto() ~= net:proto() then
