@@ -1,4 +1,4 @@
-local ntm = require "luci.model.network".init()
+local net = require "luci.model.network"
 local wan
 local ipaddr
 local file
@@ -35,6 +35,7 @@ while true do
     autodns = true
     dns = nil
     olddns = nil
+    strList = {}
     file = io.open("/etc/dhcpd.conf", "r")
     assert(file)
     for line in file:lines() do
@@ -72,16 +73,18 @@ while true do
         local lineindex = 1
         for line in file:lines() do
             if olddns then   -- has dns option
-                index = string.find(line, "domain-name-servers")
+                index = string.find(line, "domain%-name%-servers")
                 if index then
                     index = string.find(line, "#")
                     if index == nil then
                         newline = string.gsub(line, olddns, dns)
-                        strList[linedindex] = newline
+                        strList[lineindex] = newline
                     end
+		else
+		    strList[lineindex] = line
                 end
             else     --no dns option,must add one
-                index = string.find(line, "option%s+routers")    
+                index = string.find(line, "option routers")    
                 if index then
                     index = string.find(line, "#")
                     if index == nil then
@@ -112,6 +115,7 @@ while true do
     end
     
 --autoip
+	ntm = net.init()
     wan = ntm:get_wannet()
     if (wan) then
 	    ipaddr  = wan:ipaddr()

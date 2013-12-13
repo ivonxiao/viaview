@@ -35,12 +35,19 @@ function action_restart(args)
 	if args then
 		local service
 		local services = { }
-
+		local brestart_net = false
 		for service in args:gmatch("[%w_-]+") do
 			services[#services+1] = service
+			-- force restart network because pppoe change to other network get ip fail
+			if(service == 'network') then
+				brestart_net = true
+			end
 		end
 
 		local command = uci:apply(services, true)
+		if(brestart_net) then
+			luci.sys.call('/etc/init.d/network restart')
+		end
 		if nixio.fork() == 0 then
 			local i = nixio.open("/dev/null", "r")
 			local o = nixio.open("/dev/null", "w")

@@ -18,7 +18,7 @@ You may obtain a copy of the License at
 	local ifaces = { }
 	local netlist = { }
 	for _, net in ipairs(ntm:get_networks()) do
-		if net:name() ~= "loopback" and net:name() ~= "wlan" then
+		if net:name() == "lan" then
 			local z = fwm:get_zone_by_network(net:name())
 			ifaces[#ifaces+1] = net:name()
 			netlist[#netlist+1] = {

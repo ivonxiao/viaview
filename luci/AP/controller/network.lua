@@ -597,24 +597,20 @@ function SetACDhcpdConfig()
 			line =string.format('subnet %s netmask %s {\n',eth_cur.subnet,eth_cur.mask)
 			buf =buf .. line
 		end
-		if(eth==2) then
+		--[[if(eth==2) then
 			buf =buf .. ' INTERFACE wlan0;\n'
 		else
 			buf =buf .. ' INTERFACE wlan1;\n'
 		end	
-		if(eth_cur.option ==1 ) then
-			buf = buf .. 'pool{\n'
-			line=string.format('allow members of "%s";\n',eth_cur.className)
-			buf = buf .. line
-		end
-		
+		]]--
+				
 		local ip_start=eth_cur.start
 		local ip_end =eth_cur.end_ip	
 		if(ip_start and ip_end) then
 			buf =buf .. ' range ' .. ip_start .. ' ' .. ip_end .. ';\n'
 		end
-		local primaryDNS=eth_cur.primaryDNS
-		local secondDNS =eth_cur.secondDNS
+		local primaryDNS=info_list.primaryDNS
+		local secondDNS =info_list.secondDNS
 		if(primaryDNS ~=nil) then
 			buf= buf .. '# dns_set_by_user;\n'
 			buf = buf ..' option domain-name-servers ' .. primaryDNS
@@ -628,7 +624,7 @@ function SetACDhcpdConfig()
 				buf= buf .. '# dns_set_by_user;\n'
 		end
 		
-		local domain=eth_cur.domain
+		local domain=info_list.domain
 		if(domain ~=nil) then
 			buf = buf .. ' option domain-name "' .. domain .. '";\n'
 		end
@@ -650,7 +646,6 @@ function SetACDhcpdConfig()
 			buf =buf .. '}\n'
 	end	
 		setDhcpEther(2)
-		setDhcpEther(5)
 		write_bytes=#buf
 		ret=fd:write(buf)	
 		if(ret==nil) then

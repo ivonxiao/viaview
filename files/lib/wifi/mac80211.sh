@@ -631,9 +631,9 @@ $ht_capab
 
 config wifi-iface
 	option device   'radio$devidx'
-	option network  'lan wlan5'
+	option network  'lan wlan'
 	option mode     'ap'
-	option ssid     'VN5901_5G
+	option ssid     'VN5901_5G'
 	option encryption 'none'
 EOF
         fi

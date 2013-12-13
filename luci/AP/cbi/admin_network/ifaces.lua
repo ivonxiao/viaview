@@ -34,7 +34,6 @@ end
 nw.init(m.uci)
 fw.init(m.uci)
 
-
 local net = nw:get_network(arg[1])
 
 local function backup_ifnames(is_bridge)

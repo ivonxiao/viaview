@@ -501,22 +501,6 @@ input.cbi-button[disabled] {
 	cursor: default;
 }
 
-input.cbi-input-user {
-	background-image: url('../resources/cbi/user.gif');
-	background-repeat: no-repeat;
-	background-position: 1px center;
-	color: #000000;
-	text-indent: 17px;
-}
-
-input.cbi-input-password {
-	/*background-image: url('../resources/cbi/key.gif');
-	background-repeat: no-repeat;
-	background-position: 1px center;
-	color: #000000;
-	text-indent: 17px;*/
-}
-
 input.cbi-input-find,
 input.cbi-button-find {
 	/*background-image: url('../resources/cbi/find.gif');*/

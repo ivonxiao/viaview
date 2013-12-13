@@ -13,20 +13,18 @@ config zone
 	option forward 'ACCEPT'
 
 config zone
-	option name 'wan'
+	option name 'br_wlan'
 	option output 'ACCEPT'
 	option input 'ACCEPT'
 	option forward 'ACCEPT'
 	option network 'wlan'
-config zone
-	option name 'wan5'
-	option output 'ACCEPT'
-	option input 'ACCEPT'
-	option forward 'ACCEPT'
-	option network 'wlan5'
+
+config include
+	option path '/etc/firewall.user'
+
 config rule
 	option name 'Allow-DHCP-Renew'
-	option src 'wan'
+	option src 'br_wlan'
 	option proto 'udp'
 	option dest_port '68'
 	option target 'ACCEPT'
@@ -34,7 +32,7 @@ config rule
 
 config rule
 	option name 'Allow-Ping'
-	option src 'wan'
+	option src 'br_wlan'
 	option proto 'icmp'
 	option icmp_type 'echo-request'
 	option family 'ipv4'
@@ -42,7 +40,7 @@ config rule
 
 config rule
 	option name 'Allow-DHCPv6'
-	option src 'wan'
+	option src 'br_wlan'
 	option proto 'udp'
 	option src_ip 'fe80::/10'
 	option src_port '547'
@@ -53,7 +51,7 @@ config rule
 
 config rule
 	option name 'Allow-ICMPv6-Input'
-	option src 'wan'
+	option src 'br_wlan'
 	option proto 'icmp'
 	list icmp_type 'echo-request'
 	list icmp_type 'echo-reply'
@@ -72,7 +70,7 @@ config rule
 
 config rule
 	option name 'Allow-ICMPv6-Forward'
-	option src 'wan'
+	option src 'br_wlan'
 	option dest '*'
 	option proto 'icmp'
 	list icmp_type 'echo-request'
@@ -86,20 +84,17 @@ config rule
 	option family 'ipv6'
 	option target 'ACCEPT'
 
-config include
-	option path '/etc/firewall.user'
-
 config forwarding
 	option dest 'lan'
-	option src 'wan'
+	option src 'br_wlan'
 
 config forwarding
-	option dest 'wan'
+	option dest 'br_wlan'
 	option src 'lan'
 
 config redirect
 	option target 'DNAT'
-	option src 'wan'
+	option src 'br_wlan'
 	option dest 'lan'
 	option proto 'tcp udp'
 	option name 'Port Forwards'
@@ -110,94 +105,7 @@ config redirect
 	option target 'SNAT'
 	option proto 'all'
 	option src_dip '192.168.1.1'
-	option name 'hover SNAT'
-	option src 'wan'
-	option dest 'lan'
-# for 5G band
-config rule
-	option name 'Allow-DHCP-Renew'
-	option src 'wan5'
-	option proto 'udp'
-	option dest_port '68'
-	option target 'ACCEPT'
-	option family 'ipv4'
-
-config rule
-	option name 'Allow-Ping'
-	option src 'wan5'
-	option proto 'icmp'
-	option icmp_type 'echo-request'
-	option family 'ipv4'
-	option target 'ACCEPT'
-
-config rule
-	option name 'Allow-DHCPv6'
-	option src 'wan5'
-	option proto 'udp'
-	option src_ip 'fe80::/10'
-	option src_port '547'
-	option dest_ip 'fe80::/10'
-	option dest_port '546'
-	option family 'ipv6'
-	option target 'ACCEPT'
-
-config rule
-	option name 'Allow-ICMPv6-Input'
-	option src 'wan5'
-	option proto 'icmp'
-	list icmp_type 'echo-request'
-	list icmp_type 'echo-reply'
-	list icmp_type 'destination-unreachable'
-	list icmp_type 'packet-too-big'
-	list icmp_type 'time-exceeded'
-	list icmp_type 'bad-header'
-	list icmp_type 'unknown-header-type'
-	list icmp_type 'router-solicitation'
-	list icmp_type 'neighbour-solicitation'
-	list icmp_type 'router-advertisement'
-	list icmp_type 'neighbour-advertisement'
-	option limit '1000/sec'
-	option family 'ipv6'
-	option target 'ACCEPT'
-
-config rule
-	option name 'Allow-ICMPv6-Forward'
-	option src 'wan5'
-	option dest '*'
-	option proto 'icmp'
-	list icmp_type 'echo-request'
-	list icmp_type 'echo-reply'
-	list icmp_type 'destination-unreachable'
-	list icmp_type 'packet-too-big'
-	list icmp_type 'time-exceeded'
-	list icmp_type 'bad-header'
-	list icmp_type 'unknown-header-type'
-	option limit '1000/sec'
-	option family 'ipv6'
-	option target 'ACCEPT'
-
-config forwarding
-	option dest 'lan'
-	option src 'wan5'
-
-config forwarding
-	option dest 'wan5'
-	option src 'lan'
-
-config redirect
-	option target 'DNAT'
-	option src 'wan5'
-	option dest 'lan'
-	option proto 'tcp udp'
-	option name 'Port Forwards'
-	option src_dip '192.168.1.1'
-	option dest_ip '192.168.3.0/24'
-
-config redirect
-	option target 'SNAT'
-	option proto 'all'
-	option src_dip '192.168.1.1'
-	option name 'hover SNAT'
-	option src 'wan5'
+	option name 'ivon SNAT'
+	option src 'br_wlan'
 	option dest 'lan'
 
