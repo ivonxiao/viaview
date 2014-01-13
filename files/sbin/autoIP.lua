@@ -116,9 +116,11 @@ while true do
     
 --autoip
 	ntm = net.init()
-    wan = ntm:get_wannet()
+--    wan = ntm:get_wannet(a)
+	wan=ntm:get_network('lan'):get_interface():ipaddrs()[1]
     if (wan) then
-	    ipaddr  = wan:ipaddr()
+	  --  ipaddr  = wan:ipaddr()
+		ipaddr=wan:host():string()
 	    --print(ipaddr)
 	    if ipaddr ~= "192.168.2.1" and ipaddr ~= oldip then
 		file = io.open("/etc/config/firewall", "r")
