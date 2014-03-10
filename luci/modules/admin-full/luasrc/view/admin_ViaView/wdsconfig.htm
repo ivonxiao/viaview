@@ -1,0 +1,686 @@
+<%+header%>
+<%
+function makeRecordFromStr(str)
+	local record={}
+	for k,v in string.gmatch(str,"(%w+)=([^&%s]+)") do
+		if(record[k] == nil) then
+			record[k]=v
+		else
+			local client=record[k]
+			if(type(client) ~= "table") then
+				record[k]={client}
+				table.insert(record[k],v)
+			else
+				table.insert(record[k],v)
+			end	
+		end
+	end
+	return record
+end
+json=require "luci.json"
+function connect()
+	local socket=require "socket"
+	local udp=socket:udp()
+	local host="localhost"
+	local port="8888"
+	udp:settimeout(300)
+	udp:setpeername(host,port)
+	return udp
+end
+function getReceivedData(conn,request,start,eof_data)
+	local index=1	
+	local list={}
+	conn:send(request)
+	while index<= 300 do
+		local info=conn:receive()
+		if(info) then			
+			if(string.find(info,eof_data)) then
+				break
+			end
+			list[index]=info
+			if(string.find(info,start)) then
+				index =index +1
+			end
+		else
+			break
+		end
+	end	
+	return list
+end
+function strList2ObjList(strlist)
+	local objlist={}
+	for i=1, #strlist do
+		local info=makeRecordFromStr(strlist[i])
+		table.insert(objlist,info)
+	end
+	return objlist
+end
+function makeAPListForWDS(arg)
+	local ret={}
+	local cnt,idx=#arg,1
+	while idx <= cnt do
+		ret[idx]={}
+		local ap=arg[idx]
+		-- mac show as "001122334455"
+		--local mac=string.gsub(ap.MACAddress,"%w%w","%0:") 		
+		--ret[idx].mac=string.sub(mac,1,-2)
+		ret[idx].mac=ap.MACAddress
+		ret[idx].ip=ap.IPAddress
+		ret[idx].name=ap.APName	
+		ret[idx].index=idx-1
+		idx=idx+1
+	end
+	return ret
+end
+conn=connect()
+aps=getReceivedData(conn,"viamanagAPListRequestStart","viamanagAPListRequestStart","viamanagAPListRequestEnd")
+list=strList2ObjList(aps)
+aplistWDS=makeAPListForWDS(list)
+
+aps=getReceivedData(conn,"viamanaggetWDSConfInfo","viamanaggetWDSConfInfo","viamanaggetWDSEnd")
+list=strList2ObjList(aps)
+conn:close()
+%>
+	<style type="text/css">
+		label{float:left;width:10em;}
+		.ap_ops{margin-left:10em;}
+		.align{margin-left:0}
+		#overlay{
+		position:fixed;
+		left:0;
+		top:0;
+		width:100%;
+		height:100%;
+		background:#000;
+		opacity:0.8;
+		filter:alpha(opacity=80);
+		display:none;
+		}
+		#overlay fieldset{
+			position:absolute;
+			left:50%;
+			top:50%;
+			width:400px;
+			height:200px;
+			margin-left:-200px;
+			margin-top:-100px;
+		}
+		#overlay legend{color:#00c;background:#fff}
+		.cbi-section li{list-style: none;padding:3px 0;}
+		table{border-spacing:0;border-collapse:collapse;max-height:10em;overflow:auto;display:block;margin-top:10px;}
+	th,td{border:1px solid #033;text-align:left;height:20px;padding:3px 8px;}
+	#loading{color:00c;font-size:16px;display:none;}
+	</style>
+<h2><a id="content" name="content">WDS Configuration</a></h2>
+	<div class="cbi-map-descr">set WDS configuration
+	</div>
+<form method="post" name="wds_contain" action="#">
+<fieldset class="cbi-section">
+	<legend>WDS Config</legend>
+	<ul style="margin:0;border-bottom:1px solid #ccc;padding-bottom:10px">
+		<li>
+			<label>Group Name:</label>
+			<input type="text" name="group" id="group" />
+		</li>
+		<li>
+			<label>ESSID:</label>
+			<input type="text" name="essid" id="essid" />
+		</li>		
+        <li>
+			<label>WDS Server:</label>
+			<input type="text" name="server" readonly="true" id="server" />
+			<div class="ap_ops">
+			<input type="button" name="select_server" id="select_server" value="Select" class="align" />
+			<input type="button" name="edit_server" id="edit_server" value="Edit" />
+			<input type="button" name="clr_server" id="clr_server" value="Clear" />
+			</div>
+		</li>
+		<li>
+			<label>WDS Client:</label>			
+			<select id="clients" name="clients">
+			</select>
+			<div class="ap_ops">
+			<input type="button" name="select_client" id="select_client" value="Select" class="align" />
+			<input type="button" name="edit_client" id="edit_client" value="Edit" />
+			<input type="button" name="clr_client" id="clr_client" value="Clear" />
+			</div>
+		</li>
+		<li>
+			<label>HT Mode:</label>
+			<select id="ht_mode" name="ht_mode">
+			</select>
+		</li>
+		<li>
+			<label>Channel:</label>
+			<select id="channel" name="channel">
+			</select>
+		</li>
+		<li>
+			<label>Security Mode:</label>
+			<select id="security" name="security">
+			</select>
+		</li>
+		<li>
+			<label>Index/Cipher:</label>
+			<select id="cipher" name="cipher">
+			</select>
+		</li>
+		<li>
+			<label>Key:</label>
+			<input type="text" name="key" id="key" />
+		</li>
+	</ul>
+	<table>
+		<tr>
+			<th id="group_hook">WDS Group Name</th>
+			<th>WDS Server</th>
+		</tr>
+		<tbody id="wds_info">			
+		</tbody>
+	</table>	
+</fieldset>
+<input type="hidden" name="data_submit" id="data_submit" value="" />
+<input type="button" name="save" id="add" value="Add" />
+<input type="button" name="del" id="del" value="Delete" />
+<span id="loading">Please wait,is setting now<img src="/luci-static/resources/icons/loading.gif" alt="Loading" style="vertical-align:middle" /></span>
+<div id="overlay">
+<fieldset class="toggle cbi-section">
+	<legend>Select an AP to WDS Group</legend>
+	<table>
+		<tr>
+			<th></th>
+			<th>AP Name</th>
+			<th>AP MAC</th>
+			<th>AP IP Address</th>
+		</tr>
+		<tbody id="apinfo">
+		</tbody>
+	</table>
+	<input type="button" id="selectap" value="Apply" />
+	<input type="button" id="close" value="Close"  />
+</fieldset>
+</div>
+</form>
+<script type="text/javascript" src="<%=resource%>/util.js"></script>
+<script>
+//<![CDATA[
+var wds_config={
+	group:'',
+	essid:'',
+	server:'',
+	client:[],
+	ht_mode:'',
+	channel:0,
+	security:'',
+	cipher:'',
+	key:''
+},
+	/*exist_wds_info=[{group:'aaa',essid:'1111',server:'00:11:22:33:44:55',client:'11:22:33:44:55:66'},
+	{group:'bbb',essid:'2222',server:'11:11:22:33:44:55',client:['11:11:3e:4e:5e:66']}
+	],
+	*/
+	exist_wds_info=JSON.parse('<%= json.encode(list)%>'),
+	init_info={
+		ht_mode:['20MHz','40MHz 2nd channel below','40MHz 2nd channel above'],
+		channel:['36(5.180 GHz)','40(5.200 GHz)','44(5.220 GHz)','48(5.240 GHz)','149(5.745 GHz)',
+				'153(5.765 GHz)','157(5.785 GHz)','161(5.805 GHz)','165(5.825 GHz)'],
+		security:['No Encription','WPA-PSK','WPA2-PSK','WPA-PSK/WPA2-PSK Mixed Mode'],
+		cipher:['auto','Force CCMP(AES)','Force TKIP','Force TKIP and CCMP(AES)']
+	},
+	global_dom={
+	};
+global_dom.group=document.getElementById('group');
+global_dom.essid=document.getElementById('essid');
+global_dom.server=document.getElementById('server');
+global_dom.clients=document.getElementById('clients');
+global_dom.ht_mode=document.getElementById('ht_mode');
+global_dom.channel=document.getElementById('channel');
+global_dom.security=document.getElementById('security');
+global_dom.cipher=document.getElementById('cipher');
+global_dom.key=document.getElementById('key');
+global_dom.wds_info=document.getElementById('wds_info');
+function init_sel(src,data) { //src is select dom object
+	if(src && src.nodeName && src.nodeName.toLowerCase() === 'select') {				
+		for(var i=0,len=data.length;i<len;i++) {			
+			src.add(new Option(data[i],data[i]));			
+		}		
+	}
+}
+// if wds group have only one client,let it join in a array
+(function(){
+	init_sel(global_dom.ht_mode,init_info.ht_mode);
+	init_sel(global_dom.channel,init_info.channel);
+	init_sel(global_dom.security,init_info.security);
+	init_sel(global_dom.cipher,init_info.cipher);
+	for(var i=0,len=exist_wds_info.length;i<len;i++) {
+		var client=exist_wds_info[i].client;
+		if(typeof  client==='string') {
+			exist_wds_info[i].client=[client];
+		}
+	}		
+})();
+//遍历wds_list列表,找出相应server与client AP,在ap list列表中添加标记
+function produce_ap_list(wds_list,o_ap) {
+	var i,len,
+		wds,
+		server_mac,
+		clients;
+	len=wds_list.length;
+	for(i=0;i<len;i++) {
+		wds=wds_list[i];
+		server_mac=wds.server; //mac
+		ap=o_ap[server_mac];
+		if(ap) {
+			ap.wds=true;
+			ap.server=true;
+			ap.group=wds.group;
+		}	
+
+		clients=wds.client;	
+		if(!clients)continue;	
+		console.log(clients)
+		for(var j=0,cur_ap_clients=clients.length;j<cur_ap_clients;j++) {
+			ap=o_ap[clients[j]];
+			console.log(ap);
+			if(ap) {
+				ap.wds=true;
+				ap.client=true;
+				ap.group=wds.group;
+			}	
+		}
+	}
+}
+//exist_aps={};//每个AP以mac属性作为键保存配置
+//produce ap list 
+/*aplist=[{name:'VN5901',mac:'00:11:22:33:44:55',ip:'192.168.1.1',index:0},{name:'VN5902abceds',mac:'11:22:33:44:55:66',ip:'192.168.2.1',index:1},{name:'VN5903',mac:'11:11:22:33:44:55',ip:'192.168.3.1',index:2},{name:'VN5904',mac:'11:11:3e:4e:5e:66',ip:'192.168.4.1',index:3},{name:'VN590d',mac:'1f:11:22:33:e4:55',
+    ip:'192.168.4.1',index:4},{name:'VN59034',mac:'53:11:22:33:d4:55', ip:'192.168.5.1',index:5}
+	];
+	*/
+aplist=JSON.parse('<%=json.encode(aplistWDS) %>');	
+function saveAPbyMac(aplist) {
+	var ret_aplist={};
+	for(var i=0,len=aplist.length;i<len;i++) {
+		var ap=aplist[i];
+		ret_aplist[ap.mac]=ap; //reference assign
+	}
+	return ret_aplist;
+}
+exist_aps=saveAPbyMac(aplist);
+produce_ap_list(exist_wds_info,exist_aps);
+global_dom.aplist_bak=copyApList(aplist);
+function wds_available(){
+	var ap_container=document.getElementById('apinfo');
+	clearallrows(ap_container);
+	var newinput,newrow,newcell;
+	var argc=arguments.length,
+		group;
+	if(argc===2) {
+		group=arguments[1];
+	}
+	arg=arguments[0]; //select server or client
+	for(var i=0,len=global_dom.aplist_bak.length;i<len;i++) {
+		var ap=(global_dom.aplist_bak)[i]
+			ap_act=aplist[i]; //this AP exist in a group <==>ap_act.wds=true
+		//if(ap_act.wds || (ap.server &&arg !==1) ||(ap.client && arg===1) || (ap.group && (argc ===1 ||
+		//	group !== ap.group))) {
+		if(ap_act.wds || (ap.server &&arg !==1) ||(ap.client && arg===1)) {
+			// select wds server,hide wds cliens ap
+			// select server,hide client ap
+			// hide other group ap
+			continue;
+		}	
+		else {
+			newrow=document.createElement('tr');
+			ap_container.appendChild(newrow);
+			newcell=document.createElement('td');
+			newrow.appendChild(newcell);
+			if(arg===1) { //select wds server
+				if(ap.server) {
+				newcell.innerHTML='<input type="radio" value="'+ap.index +'" checked="checked" name="ap_server" />';
+				}
+				else{
+				newcell.innerHTML='<input type="radio" value="'+ap.index+'" name="ap_server" />';
+				}
+			}			
+			else{
+				if(ap.client)
+					newcell.innerHTML='<input type="checkbox" value="'+ap.index +'" name="ap_client" checked="checked" />';
+				else
+					newcell.innerHTML='<input type="checkbox" value="'+ap.index +'" name="ap_client" />';
+			}
+			
+
+			newcell=document.createElement('td');
+			newcell.innerHTML=ap.name;
+			newrow.appendChild(newcell);
+
+			newcell=document.createElement('td');
+			newcell.innerHTML=ap.mac;
+			newrow.appendChild(newcell);
+
+			newcell=document.createElement('td');
+			newcell.innerHTML=ap.ip;
+			newrow.appendChild(newcell);
+		}
+	}
+}
+global_dom.clients.onchange=function() {
+	//var idx=this.getAttribute('data-index') || this.options[this.selectedIndex].value;
+}
+var select_server=document.getElementById('select_server');
+var select_client=document.getElementById('select_client');
+var select_ap=document.getElementById('selectap');
+var over_close=util.$id('close');
+var clr_server=document.getElementById('clr_server');
+var clr_client=document.getElementById('clr_client');
+var edit_server=document.getElementById('edit_server');
+var edit_client=document.getElementById('edit_client');
+var btn_add=document.getElementById('add');
+var btn_del=document.getElementById('del');
+var f_containner=document.getElementsByTagName('form')[0];
+select_server.onclick=function() {
+	var idx=parseInt(global_dom.server.getAttribute('data-index'));
+	if(!(isNaN(idx)) && aplist[idx].wds) {
+		alert('Modify not allowed');
+		return false;
+	}
+	util.$id('overlay').style.display='block';
+	/*if(global_dom.existGroup)
+		wds_available(1,global_dom.existGroup);
+	else*/
+		wds_available(1);	
+}
+select_client.onclick=function() {
+	var sel_idx=global_dom.clients.selectedIndex;
+	if(sel_idx>=0) {
+		var idx=global_dom.clients.options[sel_idx].value;	
+		if(!(isNaN(idx)) && aplist[idx].wds) {
+			alert('Modify not allowed');
+			return false;
+		}
+	}	
+	util.$id('overlay').style.display='block';
+	/*if(global_dom.existGroup)
+		wds_available(0,global_dom.existGroup);
+	else*/	
+		wds_available(0);
+}
+over_close.onclick=function() {
+	util.$id('overlay').style.display='none';
+}
+edit_server.onclick=function() {
+	var idx=parseInt(global_dom.server.getAttribute('data-index')),
+		query='',
+		ap;
+	if(!(isNaN(idx))) {
+		ap=aplist[idx];
+		query+='MACAddress=' +ap.mac +'&&IPAddress=' +ap.ip +'&&APName=' +ap.name;
+		location.href="<%=controller%>/admin/ViaView/APList/ApConfig?" +query;
+	}	
+}
+edit_client.onclick=function() {
+	var query='',
+		ap;
+	var sel_idx=global_dom.clients.selectedIndex;
+	if(sel_idx>=0) {
+		var idx=global_dom.clients.options[sel_idx].value;			
+		if(!(isNaN(idx))) {
+			ap=aplist[idx];
+			query+='MACAddress=' +ap.mac +'&&IPAddress=' +ap.ip +'&&APName=' +ap.name;
+			location.href="<%=controller%>/admin/ViaView/APList/ApConfig?" +query;
+		}	
+	}	
+}
+select_ap.onclick = function() {
+	var inputs=document.getElementById('apinfo').getElementsByTagName('input'),
+		cur_aps=inputs.length;
+
+	var is_server=false,
+		ret={},
+		client_cnt=0,
+		all_ap=global_dom.aplist_bak.length;
+	var i,
+		ap_index;
+	// clear all wds server or client setting
+	for(i=0;i<cur_aps;i++) {
+		ap_index=parseInt(inputs[i].value,10);
+		if(!global_dom.aplist_bak[ap_index])break;
+		global_dom.aplist_bak[ap_index].wds=false;
+		global_dom.aplist_bak[ap_index].server=false;
+		global_dom.aplist_bak[ap_index].client=false;
+		//delete global_dom.aplist_bak[ap_index].group;
+	}
+	if(cur_aps>0 && inputs[0].type.toLowerCase() ==='radio')
+		is_server=true;
+	if(is_server) {
+		for(var i=0,len=cur_aps;i<len;i++) {
+			if(inputs[i].checked) {
+				ret.ap_server=inputs[i].value;
+				break;
+			}
+		}
+	}
+	else {
+		ret.ap_clients=[];
+		for(var i=0,len=cur_aps;i<len;i++) {
+			if(inputs[i].checked)
+				ret.ap_clients.push(inputs[i].value);
+		}
+		client_cnt=ret.ap_clients.length;
+	}
+	if(ret.ap_server) {		
+		global_dom.aplist_bak[ret.ap_server].wds=true;
+		//if(global_dom.existGroup)			
+		//	global_dom.aplist_bak[ret.ap_server].group=global_dom.existGroup;
+		global_dom.aplist_bak[ret.ap_server].server=true;
+		
+		global_dom.server.setAttribute('data-index',ret.ap_server)
+		global_dom.server.value=global_dom.aplist_bak[ret.ap_server].name + '/' +global_dom.aplist_bak[ret.ap_server].ip;
+	}	
+	else{
+		global_dom.clients.length=0;
+		for(i=0;i<client_cnt;i++) {			
+			global_dom.aplist_bak[ret.ap_clients[i]].wds=true;
+		//	if(global_dom.existGroup)			
+		//		global_dom.aplist_bak[ret.ap_clients[i]].group=global_dom.existGroup;
+			global_dom.aplist_bak[ret.ap_clients[i]].client=true;
+
+			option=new Option(global_dom.aplist_bak[ret.ap_clients[i]].name + '/' +global_dom.aplist_bak[ret.ap_clients[i]].ip,ret.ap_clients[i]);
+			global_dom.clients.add(option);
+		}
+	}
+	util.$id('overlay').style.display='none';
+	return ret;
+}
+clr_server.onclick=function() {
+	var index=parseInt(global_dom.server.getAttribute('data-index'),10);
+	if(!isNaN(index)) {
+		var ap=global_dom.aplist_bak[index];
+		
+		global_dom.server.value='';
+		global_dom.server.removeAttribute('data-index');
+		ap.wds=false;
+		ap.server=false;
+	}
+}
+clr_client.onclick=function() {
+	var options=global_dom.clients.options;
+	var index,ap;
+	for(var i=0,len=options.length;i<len;i++) {
+		index=+options[i].value;
+		ap=global_dom.aplist_bak[index];		
+		ap.wds=false;
+		ap.client=false;
+	}	
+	global_dom.clients.length=0;	
+}
+btn_add.onclick=function() {
+	var wds_config={};
+	var group=global_dom.group.value;
+	var essid,ht_mode,channel,security,cipher,key,server,clients,
+		client,idx;
+	if(group==='') {alert('Group name required.'); return false;}
+	if(findWDSGroup(group,exist_wds_info)) {
+		alert('Group name exist.');
+		return false;
+	}
+	essid=global_dom.essid.value;
+	if(essid==='') {alert('ESSID required.'); return false;}
+	if(global_dom.server.value===''){alert('WDS Server required.'); return false;}
+	idx=global_dom.server.getAttribute('data-index');
+	if(aplist[idx].wds) {
+		alert('Server AP already join in other group');
+		return false;
+	}
+	clients=global_dom.clients.options;
+	wds_config.client=[];
+	for(var i=0,cnt=clients.length;i<cnt;i++) {
+		client=+clients[i].value;
+		wds_config.client.push(aplist[client].mac); // save ap client mac
+		if(aplist[client].wds) {
+			alert('Client AP('+aplist[client].name+') already join in other group');
+			return false;
+		}
+	}
+	if(wds_config.client.length==0){alert('WDS Client required.'); return false;}
+	ht_mode=global_dom.ht_mode.selectedIndex;
+	channel=global_dom.channel.selectedIndex;
+	security=global_dom.security.selectedIndex;
+	cipher=global_dom.cipher.selectedIndex;
+	key=global_dom.key.value;
+	wds_config.group=group;
+	wds_config.essid=essid;
+	wds_config.server=aplist[idx].mac;
+	wds_config.htmode=ht_mode+1;
+	wds_config.channel=channel+1;
+	wds_config.security=security+1;
+	wds_config.cipher=cipher+1;
+	wds_config.key=key;
+	if(security && wds_config.key.length<8) {
+		alert("Key should be at least 8 chars");
+		return false;
+	}
+	f_containner.action='<%=controller%>/admin/ViaView/wds_add';
+	document.getElementById('data_submit').value=JSON.stringify(wds_config);
+	f_containner.submit();
+	document.getElementById('loading').style.display='inline';
+	this.disabled=true;
+}
+btn_del.onclick=function() {
+	var del=false;
+	if(global_dom.existGroup) {
+		del=confirm("Are you really want to delete WDS Group:\n"+global_dom.existGroup);
+		if(del) {
+			f_containner.action='<%=controller%>/admin/ViaView/wds_del';
+			document.getElementById('data_submit').value=global_dom.existGroup;
+			f_containner.submit();
+			document.getElementById('loading').style.display='inline';
+			this.disabled=true;
+		}
+	}
+	else {
+		alert("Please choose a group to delete");
+	}
+}
+function clearallrows(tab) {
+	var cur_len=tab.rows.length-1;
+	while(cur_len>=0) {
+		tab.deleteRow(tab.rows[cur_len]);
+		cur_len--;
+	}
+}
+function show_wds_info(wds_list) {
+	var newrow,newcell,apName,apIp,apGroup,server;
+	clearallrows(global_dom.wds_info);
+	for(var i=0,len=exist_wds_info.length;i<len;i++) {
+		apGroup=exist_wds_info[i].group;
+		server=exist_aps[exist_wds_info[i].server];
+		if(!server)continue;
+		apName=server.name;
+		apIp=server.ip;
+
+		newrow=document.createElement('tr');				
+		global_dom.wds_info.appendChild(newrow);
+		newrow.onclick=function(){var group=this.cells[0].innerHTML;loadwdscnf(group);
+			//save choose group name 
+			global_dom.existGroup=group;
+		};
+
+		newcell=document.createElement('td');
+		newcell.innerHTML=apGroup;
+		newrow.appendChild(newcell);
+
+		newcell=document.createElement('td');
+		newcell.innerHTML=apName +'/' + apIp;
+		newrow.appendChild(newcell);
+		/*var clients=exist_aps[exist_wds_info[i].client];
+		if(!clients)continue;
+		for(var idx=0,cnt=clients.length;idx<cnt;idx++) {
+			apName=exist_aps[clients[idx]].name;
+			apIp=exist_aps[clients[idx]].ip;
+			newcell=document.createElement('td');
+			newcell.innerHTML=apName +'/' + apIp;
+			newrow.appendChild(newcell);
+		}	
+		*/
+	}
+}
+function loadwdscnf(group) {
+	global_dom.aplist_bak=copyApList(aplist);
+	var wds,server,clients;
+	for(var i=0,len=exist_wds_info.length;i<len;i++) {
+		wds=exist_wds_info[i];
+		if(group === wds.group) {
+			break;
+		}
+	}
+	server=exist_aps[wds.server];
+	clients=wds.client;
+	global_dom.group.value=wds.group;
+	global_dom.essid.value=wds.essid;
+	global_dom.server.value=server.name + '/' +server.ip;
+	global_dom.server.setAttribute('data-index',server.index);
+	global_dom.clients.length=0;
+	if(!clients)return;
+	for(var j=0,len_ap=clients.length;j<len_ap;j++) {
+		var option=document.createElement('option');
+		var cli=exist_aps[clients[j]];
+		if(!cli)continue;
+		option.innerHTML= cli.name + '/' +cli.ip;
+		option.setAttribute('value',cli.index);
+		global_dom.clients.options.add(option);
+	}
+	global_dom.ht_mode.selectedIndex=+wds.htmode-1;
+	global_dom.channel.selectedIndex=+wds.channel-1;
+	global_dom.security.selectedIndex=+wds.security-1;
+	global_dom.cipher.selectedIndex=+wds.cipher-1;
+	global_dom.key.value=wds.key || "";
+}
+function copyApList(aplist) {
+	var ret=[],i,len,ap,tmpAp;
+	for(i=0,len=aplist.length;i<len;i++) {
+		ap=aplist[i];
+		tmpAp={};
+		for(var prop in ap) {
+			if(ap.hasOwnProperty(prop)) {
+				tmpAp[prop]=ap[prop];
+			}
+		}
+		ret.push(tmpAp);
+	}
+	return ret;
+}
+function findWDSGroup(name,arr) {
+	var group;
+	for(var i=0,len=arr.length;i<len;i++)  {
+		group=arr[i].group;
+		if(group === name)
+			return true;
+	}
+	return false;
+}
+show_wds_info(exist_wds_info);
+
+//]]>
+</script>
+<%+footer%>

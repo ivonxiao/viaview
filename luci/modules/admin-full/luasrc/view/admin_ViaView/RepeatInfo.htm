@@ -1,0 +1,185 @@
+<%+header%>
+	<style type="text/css">
+	table{border-spacing:0;border-collapse:collapse;height:auto;overflow:auto;display:block;margin-top:10px;}
+	th{background: #457ba7;}
+	th,td{border:1px solid #033;text-align:left;height:20px;padding:3px 10px;}
+	.light{background: #e3e3e3;}
+	</style>
+<%
+local json=require "luci.json"
+function connect(time)
+	local socket=require "socket"
+	local udp=socket:udp()
+	local host="localhost"
+	local port="8888"
+	udp:settimeout(time)
+	udp:setpeername(host,port)
+	return udp
+end
+function getReceivedData(conn,request,start,eof_data)
+	local index=1	
+	local list={}
+	conn:send(request)
+	while index<= 300 do
+		local info=conn:receive()
+		if(info) then		
+			if(string.find(info,eof_data)) then
+				break
+			end
+			list[index]=info			
+			if(string.find(info,start)) then
+				index =index +1
+			end
+		else
+			break
+		end
+	end	
+	return list
+end
+function makeRecordFromStr(str)
+	local record={}
+	for k,v in string.gmatch(str,"(%w+)=([^&]*)") do
+		if(record[k] == nil) then
+			record[k]=v
+		else
+			local client=record[k]
+			if(type(client) ~= "table") then
+				record[k]={client}
+				table.insert(record[k],v)
+			else
+				table.insert(record[k],v)
+			end	
+		end
+	end
+	return record
+end
+function strList2ObjList(strlist)
+	local objlist={}
+	for i=1, #strlist do
+		local info=makeRecordFromStr(strlist[i])
+		table.insert(objlist,info)
+	end
+	return objlist
+end
+local strgroup = luci.http.formvalue("group")
+local conn=connect(30);
+if(strgroup) then
+	local request='viamanagdelWDSRepeatGroup group=' .. strgroup;
+	conn:send(request)
+end
+
+list=getReceivedData(conn,"viamanaggetWDSRepeatGroupInfo","viamanaggetWDSRepeatGroupInfo","viamanaggetWDSRepeatGroupInfoEnd")
+infos=strList2ObjList(list)
+conn:close()	
+
+%>
+<h2><a id="content" name="content">WDS Repeat Configuration</a></h2>
+<form action="<%=controller%>/admin/ViaView/RepeatWDS" method="post">
+<table>
+	<thead>
+		<tr>
+			<th>Group(Option)</th>
+			<th>AP Name/IP</th>
+			<th>Radio</th>
+			<th>SSID</th>
+			<th>BSSID</th>
+			<th>WDS Mode</th>
+			<th>Server BSSID</th>
+		</tr>
+	</thead>
+	<tbody id="apcontainner">
+	</tbody>
+</table>
+</form>
+<script type="text/javascript">
+//<![CDATA[
+var acreply='<%=json.encode(infos)%>';
+arrgroup=JSON.parse(acreply);
+function produceWDSlist(arrgroup) {
+	var containner=document.getElementById('apcontainner'),
+		newrow,newcell,i,len,item,
+		membersno=0,role,btn_del;
+	for(i=0,len=arrgroup.length;i<len;i++){
+		item=arrgroup[i];
+		membersno=item.wdsmode.length;		
+		for(var j=0;j<membersno;j++) {
+			newrow=document.createElement('tr');
+			if(i%2==1){newrow.className='light';}
+			if(j==0) {
+				newcell=document.createElement('td');
+				newcell.innerHTML=item.group + '<a href="#" style="margin-left:1em">Delete</a>';
+				newcell.setAttribute('rowspan',membersno);
+				newrow.appendChild(newcell);
+			}
+			if(membersno==1) {
+				var name=item.name;
+				var ip=item.ip;
+				var radio=item.radio;
+				var ssid=item.ssid;
+				var bssid=item.bssid;
+				var wdsrole=+item.wdsmode;
+				var serverbssid=item.serverbssid||'';
+			}
+			else {
+				 name=item.name[j];
+				 ip=item.ip[j];
+				 radio=item.radio[j];
+				 ssid=item.ssid[j];
+				 bssid=item.bssid[j];
+				 wdsrole=+item.wdsmode[j];
+				 serverbssid=(item.serverbssid&&item.serverbssid[j])||'';
+			}
+			newcell=document.createElement('td');
+			newcell.innerHTML=name+'/'+ ip;
+			newrow.appendChild(newcell);
+			newcell=document.createElement('td');
+			newcell.innerHTML=radio==1?'2.4G':'5G';
+			newrow.appendChild(newcell);
+			newcell=document.createElement('td');
+			newcell.innerHTML=ssid;
+			newrow.appendChild(newcell);
+			newcell=document.createElement('td');
+			newcell.innerHTML=bssid;
+			newrow.appendChild(newcell);
+			newcell=document.createElement('td');
+			role=+wdsrole;		
+			switch(role) {
+				case 1:
+					newcell.innerHTML='WDS Server';
+					break;
+				case 2:
+					newcell.innerHTML='WDS Client';
+					break;
+				case 3:
+					newcell.innerHTML='Repeat Server';
+					break;
+				case 4:
+					newcell.innerHTML='Repeat Client';
+					break;		
+			}			
+			newrow.appendChild(newcell);
+			newcell=document.createElement('td');
+			newcell.innerHTML=serverbssid;
+			newrow.appendChild(newcell);
+			containner.appendChild(newrow);
+		}
+	}
+}
+produceWDSlist(arrgroup);
+containner=document.getElementById('apcontainner');
+containner.onclick=function(e){
+	var target=e.target||window.srcElement,
+		group;
+	if(target.nodeName.toLowerCase() == 'a') {
+		group=e.target.previousSibling&&e.target.previousSibling.nodeValue||'';
+		var xhr=new XHR();
+		xhr.post('.','group='+group,function() {
+			//window.location.reload();
+		});
+	}
+	setTimeout(function(){window.location.reload();},10000)
+	return false;
+}
+//]]>
+</script>
+<%+footer%>
