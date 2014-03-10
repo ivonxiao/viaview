@@ -101,6 +101,13 @@ function index()
 		page = entry({"admin","network","dhcpv6"},template("admin_network/DHCPv6Server"),_("DHCPv6 Server Setting"),70)
 		page = entry({"admin", "network", "DHCPConfigSave"}, call("dhcpconfig_save"), nil)
 		page.leaf = true
+
+		page = entry({"admin", "ViaView", "wdsconfig"}, template("admin_ViaView/wdsconfig"), _("WDS Setting"),80)
+		page = entry({"admin", "ViaView", "wds_add"}, call("wds_add"), nil)
+		page.leaf = true
+		
+		page = entry({"admin", "ViaView", "wds_del"}, call("wds_del"), nil)
+		page.leaf = true
 		page = entry({"admin", "network", "iface_status"}, call("iface_status"), nil)
 		page.leaf = true
 
@@ -168,7 +175,92 @@ function index()
 		]]--
 --	end
 end
+function connect()
+	local socket=require "socket"
+	local udp=socket:udp()
+	local host="localhost"
+	local port="8888"
+	udp:settimeout(300)
+	udp:setpeername(host,port)
+	return udp
+end
+function wds_add()	
+	local json=require "luci.json"
+	local str_cmd="viamanagaddWDSGroupServer "
+	local wds=luci.http.formvalue('data_submit')
+	local response="fail"
+	if(wds) then
+		local request=''
+		local reply
+		local data=json.decode(wds)
+		request=request .. "group=" .. data.group
+		request=request .. "&&"
+		request=request .. "essid=" .. data.essid
+		request=request .. "&&"		
+		request=request .. "htmode=" .. data.htmode
+		request=request .. "&&"
+		request=request .. "channel=" .. data.channel
+		request=request .. "&&"
+		request=request .. "security=" .. data.security
+		request=request .. "&&"
+		request=request .. "cipher=" .. data.cipher
+		request=request .. "&&"
+		request=request .. "key=" .. data.key		
+		request=request .. "&&"
+		local clients=data.client
+		for i=1,#clients do
+			request=request .. "client=" .. clients[i]
+			request=request .. "&&"
+		end
+		request=request .. "server=" .. data.server
 
+		local conn=connect()
+		conn:send(str_cmd .. request)
+		reply=conn:receive()
+		if(reply) then
+			if(string.find(reply,"success")) then				
+				str_cmd="viamanagaddWDSGroupClient "
+				conn:send(str_cmd .. request)
+				local cli_reply=conn:receive()
+				if(cli_reply) then
+					if(string.find(cli_reply,"success")) then
+						response="success"
+					end
+				end
+			end
+		end	
+		conn:close()
+		if (response == "success") then
+			luci.http.redirect(luci.dispatcher.build_url("admin/ViaView/wdsconfig"))
+		else
+			luci.http.redirect(luci.dispatcher.build_url("admin/ViaView/wdsconfig?op=1"))	
+		end
+	end
+end
+function wds_del()
+	local json=require "luci.json"
+	local str_cmd="viamanagdelWDSGroup group="
+	local group=luci.http.formvalue('data_submit')
+	local response="fail"
+	if(group) then
+		str_cmd= str_cmd .. group
+		local udp=connect()
+		local cmd_receive
+		udp:send(str_cmd)
+		cmd_receive=udp:receive()
+		if(cmd_receive) then
+			if(string.find(cmd_receive,"success")) then
+				response="success"
+			end
+		end
+		udp:close()
+	end
+	if( response == "success") then
+		luci.http.redirect(luci.dispatcher.build_url("admin/ViaView/wdsconfig"))
+	else
+		luci.http.redirect(luci.dispatcher.build_url("admin/ViaView/wdsconfig?op=1"))
+	end
+end
 function wifi_join()
 	local function param(x)
 		return luci.http.formvalue(x)
